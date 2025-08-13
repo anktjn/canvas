@@ -1,0 +1,15 @@
+<svg preserveAspectRatio="none" width="100%" height="100%" overflow="visible" style="display: block;" viewBox="0 0 21 21" fill="none" xmlns="http://www.w3.org/2000/svg">
+<g id="_ailogo" clip-path="url(#clip0_3_4715)">
+<path id="Vector" d="M21 10.5205C15.3604 10.865 10.865 15.3604 10.5205 21H10.4795C10.135 15.3604 5.63965 10.865 0 10.5205V10.4795C5.63965 10.135 10.135 5.63965 10.4795 0H10.5205C10.865 5.63965 15.3604 10.135 21 10.4795V10.5205Z" fill="url(#paint0_radial_3_4715)"/>
+</g>
+<defs>
+<radialGradient id="paint0_radial_3_4715" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(2.0866 8.53301) rotate(18.6832) scale(22.3519 179.053)">
+<stop offset="0.067" stop-color="#9168C0"/>
+<stop offset="0.343" stop-color="#5684D1"/>
+<stop offset="0.672" stop-color="#1BA1E3"/>
+</radialGradient>
+<clipPath id="clip0_3_4715">
+<rect width="21" height="21" fill="white"/>
+</clipPath>
+</defs>
+</svg>
