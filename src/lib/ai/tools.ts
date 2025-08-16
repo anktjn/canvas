@@ -1,8 +1,6 @@
 import { z } from 'zod/v4';
 import type { Tool } from '@ai-sdk/provider-utils';
 import { retrieveFromKnowledgeBase } from '@/lib/rag/retrieve';
-import { generateText } from 'ai';
-import { getDefaultModel } from './model';
 import { fetchUnderutilizedLicensesSummary } from '@/lib/data/licenses';
 
 export type UIToolResponse = {
@@ -35,39 +33,18 @@ export const tools = {
           },
         } as { ui: { type: 'card'; props: { title: string; body: string } } };
       }
-      // Compose a concise answer using the model on the server for better UX.
-      const model = getDefaultModel();
-      const sources = snippets.map((s: { url: string }, i: number) => `S${i + 1}: ${s.url}`).join('\n');
-      const context = snippets
-        .map((s: { content: string }, i: number) => `[[S${i + 1}]]\n${s.content}`)
-        .join('\n\n');
-      const prompt = `Answer the user's question concisely using only the context. Add a short bullet list of sources at the end using their labels.\n\nQuestion: ${query}\n\nContext:\n${context}\n\nSources:\n${sources}`;
 
-      let summary = '';
-      try {
-        const { text } = await generateText({ model, prompt });
-        summary = text ?? '';
-      } catch {
-        summary = '';
-      }
-
+      // Return only the raw snippets data - let the AI assistant generate the response
+      // This prevents duplication since the AI will use the snippets to craft its answer
       return {
         snippets,
-        summary,
       } as {
         snippets: Array<{ id: string; url: string; content: string; score: number }>;
-        summary: string;
       };
     },
   } satisfies Tool,
 
-  show_card: {
-    description: 'Render a card UI element with a title and body content',
-    inputSchema: z.object({ title: z.string(), body: z.string() }),
-    execute: async ({ title, body }) => {
-      return { ui: { type: 'card', props: { title, body } } } as { ui: { type: 'card'; props: { title: string; body: string } } };
-    },
-  } satisfies Tool,
+
 
   show_table: {
     description: 'Render a table with columns and rows',

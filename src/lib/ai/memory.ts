@@ -87,6 +87,33 @@ export async function loadMessages(conversationId: string, limit = 200): Promise
   }));
 }
 
+export async function deleteConversation(conversationId: string): Promise<void> {
+  const client = getServiceClient();
+  
+  // Delete all messages first
+  const { error: messagesError } = await client
+    .from('chat_messages')
+    .delete()
+    .eq('conversation_id', conversationId);
+  if (messagesError) throw messagesError;
+  
+  // Delete the conversation
+  const { error: conversationError } = await client
+    .from('chat_conversations')
+    .delete()
+    .eq('id', conversationId);
+  if (conversationError) throw conversationError;
+}
+
+export async function updateConversationTitle(conversationId: string, title: string): Promise<void> {
+  const client = getServiceClient();
+  const { error } = await client
+    .from('chat_conversations')
+    .update({ title, updated_at: new Date().toISOString() })
+    .eq('id', conversationId);
+  if (error) throw error;
+}
+
 export type ConversationListItem = {
   id: string;
   title: string | null;
