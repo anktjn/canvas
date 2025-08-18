@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { MarkdownRenderer } from "../markdown-renderer";
+import { Response } from "@/components/ai-elements/response";
 
 export interface Message {
   id: string;
@@ -36,7 +36,7 @@ export function ChatMessage({
           )}
           
           <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm w-fit max-w-[85%] ml-auto">
-            <MarkdownRenderer>{content}</MarkdownRenderer>
+            <Response>{content}</Response>
           </div>
         </div>
       </div>
@@ -55,7 +55,7 @@ export function ChatMessage({
         )}
         
         <div className="bg-muted text-foreground rounded-lg px-3 py-2 text-sm w-fit max-w-[85%]">
-          <MarkdownRenderer>{content}</MarkdownRenderer>
+          <Response>{content}</Response>
         </div>
       </div>
     </div>

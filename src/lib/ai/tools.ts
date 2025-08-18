@@ -17,30 +17,35 @@ export const tools = {
     inputSchema: z.object({ query: z.string(), k: z.number().int().min(1).max(10).default(3) }),
     execute: async ({ query, k }) => {
       const result = await retrieveFromKnowledgeBase(query, k);
-      const snippets = Array.isArray((result as any)?.snippets)
-        ? ((result as any).snippets as Array<{ id: string; url: string; content: string; score: number }>)
-        : ([] as Array<{ id: string; url: string; content: string; score: number }>);
+      type Snippet = { id: string; url: string; content: string; score: number };
+      const snippets: Snippet[] = Array.isArray((result as { snippets?: Snippet[] })?.snippets)
+        ? ((result as { snippets: Snippet[] }).snippets)
+        : ([] as Snippet[]);
 
       // If retrieval failed (embeddings/vector/RPC), degrade gracefully with a small inline note
-      if ((result as any)?.error) {
+      if ((result as { error?: string })?.error) {
         return {
           ui: {
             type: 'card',
             props: {
               title: 'Retrieval unavailable',
-              body: `Knowledge-base context lookup failed. Proceeding without retrieval.\n\n(${(result as any).error})`,
+              body: `Knowledge-base context lookup failed. Proceeding without retrieval.\n\n(${(result as { error?: string }).error})`,
             },
           },
         } as { ui: { type: 'card'; props: { title: string; body: string } } };
       }
 
-      // Return only the raw snippets data - let the AI assistant generate the response
-      // This prevents duplication since the AI will use the snippets to craft its answer
+      // Provide a compact sources list for rendering citations/Sources UI
+      const sources = snippets.map((s, i): { id: string; url: string; label: string } => ({
+        id: s.id,
+        url: s.url,
+        label: `S${i + 1}`,
+      }));
+
       return {
         snippets,
-      } as {
-        snippets: Array<{ id: string; url: string; content: string; score: number }>;
-      };
+        sources,
+      } as { snippets: Snippet[]; sources: Array<{ id: string; url: string; label: string }> };
     },
   } satisfies Tool,
 
@@ -93,7 +98,7 @@ export const tools = {
               linkToReport: '#',
             },
           },
-        } as any;
+        } as { ui: { type: 'underutilized-licenses-card'; props: Record<string, unknown> } };
       }
 
       const { data, error } = await fetchUnderutilizedLicensesSummary({
@@ -116,8 +121,20 @@ export const tools = {
       }
 
       // Map provider data into card props; where detailed fields are missing, provide reasonable defaults
-      const apps = Array.isArray((data as any).topApps)
-        ? (data as any).topApps.map((t: any) => ({
+      type ProviderApp = { appName?: unknown; instanceName?: unknown; underutilizedCount?: unknown };
+      type ProviderData = {
+        organizationName: string;
+        totalLicenses: number;
+        underutilizedCount: number;
+        utilizationThresholdPercent: number;
+        measurementPeriodDays: number;
+        topApps?: ProviderApp[];
+        lastUpdatedIso: string;
+        linkToReport: string;
+      };
+      const provider = data as ProviderData;
+      const apps = Array.isArray(provider.topApps)
+        ? provider.topApps.map((t) => ({
             appName: String(t.appName ?? 'Unknown'),
             instanceName: String(t.instanceName ?? '—'),
             accountsCount: Number(t.underutilizedCount ?? 0),
@@ -128,17 +145,17 @@ export const tools = {
         ui: {
           type: 'underutilized-licenses-card',
           props: {
-            organizationName: data.organizationName,
-            totalLicenses: data.totalLicenses,
-            underutilizedCount: data.underutilizedCount,
-            utilizationThresholdPercent: data.utilizationThresholdPercent,
-            measurementPeriodDays: data.measurementPeriodDays,
+            organizationName: provider.organizationName,
+            totalLicenses: provider.totalLicenses,
+            underutilizedCount: provider.underutilizedCount,
+            utilizationThresholdPercent: provider.utilizationThresholdPercent,
+            measurementPeriodDays: provider.measurementPeriodDays,
             apps,
-            lastUpdatedIso: data.lastUpdatedIso,
-            linkToReport: data.linkToReport,
+            lastUpdatedIso: provider.lastUpdatedIso,
+            linkToReport: provider.linkToReport,
           },
         },
-      } as any;
+      } as { ui: { type: 'underutilized-licenses-card'; props: Record<string, unknown> } };
     },
   } satisfies Tool,
 };

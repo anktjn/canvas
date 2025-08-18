@@ -27,8 +27,8 @@ export async function retrieveFromKnowledgeBase(query: string, k = 3) {
         score: m.score,
       })),
     } as const;
-  } catch (err: any) {
-    const message = typeof err?.message === 'string' ? err.message : 'unknown error';
+  } catch (err) {
+    const message = err && typeof (err as { message?: unknown }).message === 'string' ? (err as { message: string }).message : 'unknown error';
     return { snippets: [], error: `retrieval_failed: ${message}` } as const;
   }
 }

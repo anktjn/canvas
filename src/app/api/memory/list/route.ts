@@ -10,8 +10,9 @@ export async function GET(req: NextRequest) {
     const limit = Math.max(1, Math.min(100, Number(limitParam) || 20));
     const list = await listConversations(limit);
     return NextResponse.json({ conversations: list });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'unknown' }, { status: 500 });
+  } catch (e) {
+    const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

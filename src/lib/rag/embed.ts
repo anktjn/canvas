@@ -10,7 +10,8 @@ export async function embedTexts(texts: string[]): Promise<number[][]> {
     model: openai.embedding(DEFAULT_EMBEDDING_MODEL),
     values: texts,
   });
-  return embeddings.map((e) => (e as any).embedding ?? e) as number[][];
+  type EmbeddingRecord = { embedding: number[] } | number[];
+  return embeddings.map((e: EmbeddingRecord) => (Array.isArray(e) ? e : e.embedding));
 }
 
 

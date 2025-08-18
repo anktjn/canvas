@@ -79,11 +79,12 @@ export async function loadMessages(conversationId: string, limit = 200): Promise
     .order('created_at', { ascending: true })
     .limit(limit);
   if (error) throw error;
-  return (data ?? []).map((row: any) => ({
-    id: row.external_id as string,
-    role: row.role as ChatRole,
-    text: row.content as string,
-    createdAt: row.created_at as string,
+  type Row = { external_id: string; role: ChatRole; content: string; created_at: string };
+  return (data ?? []).map((row: Row) => ({
+    id: row.external_id,
+    role: row.role,
+    text: row.content,
+    createdAt: row.created_at,
   }));
 }
 

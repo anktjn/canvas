@@ -18,8 +18,9 @@ export async function GET(req: NextRequest) {
     const conv = await getOrCreateConversation(id);
     const msgs = await loadMessages(conv.id);
     return NextResponse.json({ id: conv.id, messages: msgs });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'unknown' }, { status: 500 });
+  } catch (e) {
+    const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -27,7 +28,8 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const id: string | undefined = body?.id;
-    const messages: Array<any> = Array.isArray(body?.messages) ? body.messages : [];
+    type IncomingMessage = { id?: string; role: 'user' | 'assistant' | 'system' | 'tool'; text?: string; content?: string; parts?: Array<{ type?: string; text?: string }> };
+    const messages: IncomingMessage[] = Array.isArray(body?.messages) ? (body.messages as IncomingMessage[]) : [];
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     if (!messages.length) return NextResponse.json({ ok: true });
 
@@ -35,7 +37,7 @@ export async function POST(req: NextRequest) {
 
     const toPersist: PersistedMessage[] = messages
       .filter((m) => typeof m?.role === 'string')
-      .map((m) => ({
+      .map((m: IncomingMessage) => ({
         id: String(m.id ?? crypto.randomUUID()),
         role: m.role,
         text:
@@ -45,16 +47,17 @@ export async function POST(req: NextRequest) {
             ? m.content
             : Array.isArray(m.parts)
             ? m.parts
-                .filter((p: any) => p?.type === 'text' && typeof p?.text === 'string')
-                .map((p: any) => p.text)
+                .filter((p) => p?.type === 'text' && typeof p?.text === 'string')
+                .map((p) => String(p.text))
                 .join('\n')
             : '',
       }));
 
     await saveMessages(conv.id, toPersist);
     return NextResponse.json({ ok: true, id: conv.id });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'unknown' }, { status: 500 });
+  } catch (e) {
+    const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -69,8 +72,9 @@ export async function PATCH(req: NextRequest) {
 
     await updateConversationTitle(id, title);
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'unknown' }, { status: 500 });
+  } catch (e) {
+    const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 
@@ -83,8 +87,9 @@ export async function DELETE(req: NextRequest) {
 
     await deleteConversation(id);
     return NextResponse.json({ ok: true });
-  } catch (e: any) {
-    return NextResponse.json({ error: e?.message ?? 'unknown' }, { status: 500 });
+  } catch (e) {
+    const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 }
 

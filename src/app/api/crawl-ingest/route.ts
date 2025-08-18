@@ -115,8 +115,9 @@ export async function POST(req: NextRequest) {
       await store.upsertChunks(chunks.map((content, i) => ({ url, content, embedding: embeddings[i] })));
       pagesIngested += 1;
       chunksTotal += chunks.length;
-    } catch (e: any) {
-      errors.push({ url, error: e?.message ?? 'unknown' });
+    } catch (e) {
+      const message = e && typeof (e as { message?: unknown }).message === 'string' ? (e as { message: string }).message : 'unknown';
+      errors.push({ url, error: message });
     }
   }
 

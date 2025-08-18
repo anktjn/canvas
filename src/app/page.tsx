@@ -1,7 +1,7 @@
 "use client";
 
 import { AppSidebar } from "@/components/app-sidebar";
-import Chat from "@/components/chat/Chat";
+import { ChatConversation } from "@/components/ai/ChatConversation";
 import { SidebarProvider, SidebarInset } from "@/components/ui/sidebar";
 
 export default function Home() {
@@ -13,7 +13,7 @@ export default function Home() {
           <div className="flex h-full justify-center flex-col">
             {/* Main Content - Full Width Chat */}
             <main className="flex-1 overflow-hidden">
-              <Chat />
+              <ChatConversation />
             </main>
           </div>
         </SidebarInset>
