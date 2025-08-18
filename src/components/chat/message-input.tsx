@@ -8,8 +8,8 @@ import { omit } from "remeda"
 import { cn } from "@/lib/utils"
 import { useAutosizeTextArea } from "@/hooks/use-autosize-textarea"
 import { Button } from "@/components/ui/button"
-import { FilePreview } from "@/components/ui/file-preview"
-import { InterruptPrompt } from "@/components/ui/interrupt-prompt"
+import { FilePreview } from "@/components/chat/file-preview"
+import { InterruptPrompt } from "@/components/chat/interrupt-prompt"
 
 interface MessageInputBaseProps
   extends React.TextareaHTMLAttributes<HTMLTextAreaElement> {
@@ -49,7 +49,6 @@ export function MessageInput({
   const [isDragging, setIsDragging] = useState(false)
   const [showInterruptPrompt, setShowInterruptPrompt] = useState(false)
 
-  // Voice recording disabled for now
   const isListening = false
   const isSpeechSupported = false
   const isRecording = false
@@ -402,3 +401,5 @@ interface RecordingControlsProps {
 function RecordingControls({}: RecordingControlsProps) {
   return null
 }
+
+

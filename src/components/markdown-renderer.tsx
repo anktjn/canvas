@@ -14,7 +14,6 @@ export function MarkdownRenderer({ children, className }: MarkdownRendererProps)
     <div className={cn("markdown-content", className)}>
       <ReactMarkdown
         components={{
-          // Custom styling for markdown elements
           h1: ({ children }) => <h1 className="text-xl font-bold mb-2">{children}</h1>,
           h2: ({ children }) => <h2 className="text-lg font-semibold mb-2">{children}</h2>,
           h3: ({ children }) => <h3 className="text-base font-semibold mb-1">{children}</h3>,
@@ -56,3 +55,5 @@ export function MarkdownRenderer({ children, className }: MarkdownRendererProps)
     </div>
   );
 }
+
+

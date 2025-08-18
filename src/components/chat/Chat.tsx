@@ -1,19 +1,18 @@
 "use client";
+
 import * as React from 'react';
 import { useChat } from '@ai-sdk/react';
 import { renderUIMessage, UIMessagePayload } from './ui-registry';
-import { useEffect, useMemo, useRef } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
-import { ChatForm } from '@/components/ui/chat';
-import { MessageInput } from '@/components/ui/message-input';
-import { ChatMessage, type Message as UIMessageType } from '@/components/ui/chat-message';
-import { TypingIndicator } from '@/components/ui/typing-indicator';
-import { MarkdownRenderer } from '@/components/ui/markdown-renderer';
+import { ChatForm } from '@/components/chat/chat-form';
+import { MessageInput } from '@/components/chat/message-input';
+import { ChatMessage, type Message as UIMessageType } from '@/components/chat/chat-message';
+import { TypingIndicator } from '@/components/chat/typing-indicator';
+import { MarkdownRenderer } from '@/components/markdown-renderer';
 import { Skeleton } from '@/components/ui/skeleton';
 import { Card } from '@/components/ui/card';
 import { Sparkles, MessageSquare, Database } from 'lucide-react';
 
-// Define ChatRole type locally since we're not importing from memory
 type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
 export default function Chat() {
@@ -25,7 +24,7 @@ export default function Chat() {
   const [input, setInput] = React.useState<string>('');
   const DEBUG = process.env.NEXT_PUBLIC_DEBUG_CHAT === '1';
 
-  useEffect(() => {
+  React.useEffect(() => {
     const idFromUrl = searchParams.get('c');
     if (idFromUrl && idFromUrl !== conversationId) {
       setConversationId(idFromUrl);
@@ -60,32 +59,22 @@ export default function Chat() {
     setInput('');
   }
 
-  // Load messages from memory when conversation changes
-  useEffect(() => {
+  React.useEffect(() => {
     let cancelled = false;
     (async () => {
       if (!conversationId) return;
-      
       try {
-        console.log('Loading messages for conversation:', conversationId);
         const response = await fetch(`/api/memory?id=${encodeURIComponent(conversationId)}`);
-        if (!response.ok) {
-          console.error('Failed to load messages:', response.status);
-          return;
-        }
+        if (!response.ok) return;
         const data = await response.json();
         if (!data?.messages || cancelled) return;
-        
-        console.log('Loaded messages:', data.messages);
         const restored = data.messages.map((m: any) => ({
           id: m.id,
           role: m.role as any,
           parts: [{ type: 'text', text: m.text }],
         }));
         setMessages(restored as any);
-      } catch (error) {
-        console.error('Failed to load messages:', error);
-      }
+      } catch {}
     })();
     return () => {
       cancelled = true;
@@ -110,11 +99,10 @@ export default function Chat() {
     return '';
   }
 
-  const lastSavedAssistantId = useRef<string | null>(null);
-  const prevStatus = useRef(status);
-  
-  // Save messages to memory when streaming finishes
-  useEffect(() => {
+  const lastSavedAssistantId = React.useRef<string | null>(null);
+  const prevStatus = React.useRef(status);
+
+  React.useEffect(() => {
     const wasStreaming = prevStatus.current === 'streaming';
     const isReady = status === 'ready';
     prevStatus.current = status;
@@ -133,40 +121,23 @@ export default function Chat() {
       { id: last.id, role: 'assistant' as ChatRole, text: assistantText },
     ].filter(Boolean) as Array<{ id: string; role: ChatRole; text: string }>;
 
-    // Save to memory system via API
     if (conversationId && toPersist.length > 0) {
-      console.log('Saving messages to conversation:', conversationId, toPersist);
-      
-      // Save messages via API
       fetch('/api/memory', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ id: conversationId, messages: toPersist }),
       }).then(() => {
-        console.log('Messages saved successfully');
         lastSavedAssistantId.current = last.id as string;
-      }).catch((error: any) => {
-        console.error('Failed to save messages:', error);
-      });
-      
-      // Update conversation title if this is the first exchange
+      }).catch(() => {});
+
       if (messages.length === 2 && prevUser) {
         const title = userText.length > 50 ? userText.substring(0, 50) + '...' : userText;
-        console.log('Updating conversation title:', title);
-        
-        // Update title via API
         fetch('/api/memory', {
           method: 'PATCH',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ id: conversationId, title }),
-        }).then(() => {
-          console.log('Title updated successfully');
-        }).catch((error: any) => {
-          console.error('Failed to update conversation title:', error);
-        });
+        }).catch(() => {});
       }
-    } else {
-      console.log('Not saving messages - missing conversationId or no messages to persist:', { conversationId, toPersist });
     }
   }, [status, messages, conversationId]);
 
@@ -177,7 +148,6 @@ export default function Chat() {
     })) as UIMessageType[];
   }, [messages]);
 
-  // Show welcome message when no messages
   if (displayMessages.length === 0) {
     return (
       <div className="flex h-full flex-col">
@@ -226,7 +196,6 @@ export default function Chat() {
           </div>
         </div>
         
-        {/* Fixed Message Input at Bottom */}
         <div className="border-t bg-background p-4">
           <div className="mx-auto max-w-4xl">
             <ChatForm className="w-full" isPending={status !== 'ready'} handleSubmit={onSubmit}>
@@ -250,10 +219,8 @@ export default function Chat() {
 
   return (
     <div className="flex h-full flex-col">
-      {/* Messages Container - Takes available space but doesn't overflow */}
       <div className="flex-1 overflow-y-auto p-6 min-h-0">
         <div className="mx-auto max-w-4xl space-y-6">
-          {/* Debug info */}
           {DEBUG && (
             <div className="text-xs text-muted-foreground p-2 bg-muted rounded">
               Messages: {displayMessages.length}, Status: {status}, Conversation: {conversationId}
@@ -284,10 +251,8 @@ export default function Chat() {
           ) : (
             displayMessages.map((m) => (
               <div key={m.id} className="space-y-4">
-                {/* Primary message bubble */}
                 <ChatMessage {...(m as any)} />
 
-                {/* Additional rich payloads */}
                 {Array.isArray((m as any)?.parts)
                   ? (m as any).parts.map((part: any, idx: number) => {
                       const anyPart = part as Record<string, any>;
@@ -339,8 +304,6 @@ export default function Chat() {
                           }
                           const outSnippets = Array.isArray(out?.snippets) ? out.snippets : null;
                           if (outSnippets) {
-                            // Don't render snippets as a separate card for retrieve tool
-                            // The AI assistant will generate a comprehensive response with sources
                             return null;
                           }
                           if (DEBUG) {
@@ -377,7 +340,6 @@ export default function Chat() {
                         ? payload.output.snippets
                         : null;
                       if (snippets) {
-                        // Don't render snippets as a separate card - AI assistant handles this
                         return null;
                       }
                       
@@ -401,7 +363,6 @@ export default function Chat() {
         </div>
       </div>
 
-      {/* Fixed Message Input at Bottom - Always Visible */}
       <div className="border-t bg-background p-4 flex-shrink-0">
         <div className="mx-auto max-w-4xl">
           <ChatForm className="w-full" isPending={status !== 'ready'} handleSubmit={onSubmit}>
@@ -423,4 +384,4 @@ export default function Chat() {
   );
 }
 
-
+ 

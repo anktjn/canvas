@@ -5,6 +5,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
+import { ThemeToggle } from "@/components/theme-toggle"
 import { 
   Plus, 
   MessageSquare, 
@@ -18,7 +19,7 @@ import {
   Trash2
 } from "lucide-react"
 import { cn } from "@/lib/utils"
-import { RenameDialog } from "@/components/ui/rename-dialog"
+import { RenameDialog } from "./rename-dialog"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -181,15 +182,16 @@ export function AppSidebar() {
   }
 
   return (
-    <div className="flex h-full w-100 flex-col border-r bg-background">
+    <div className="flex h-full w-160 flex-col border-r bg-background">
       {/* Header */}
-      <div className="flex h-16 shrink-0 items-center border-b px-4">
+      <div className="flex h-16 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
           <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
             <Sparkles className="h-4 w-4 text-primary-foreground" />
           </div>
           <span className="font-semibold">Canvas AI</span>
         </div>
+        <ThemeToggle />
       </div>
 
       {/* New Chat Button */}

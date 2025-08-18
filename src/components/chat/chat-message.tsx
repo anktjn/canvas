@@ -2,7 +2,7 @@
 
 import * as React from "react";
 import { cn } from "@/lib/utils";
-import { MarkdownRenderer } from "./markdown-renderer";
+import { MarkdownRenderer } from "../markdown-renderer";
 
 export interface Message {
   id: string;
@@ -24,7 +24,6 @@ export function ChatMessage({
   const isUser = role === "user";
 
   if (isUser) {
-    // User message - right aligned
     return (
       <div className={cn("flex flex-row-reverse", className)}>
         <div className="flex-1 space-y-2 text-right">
@@ -44,7 +43,6 @@ export function ChatMessage({
     );
   }
 
-  // Assistant/other messages - left aligned
   return (
     <div className={cn("flex", className)}>
       <div className="flex-1 space-y-2">
@@ -63,3 +61,5 @@ export function ChatMessage({
     </div>
   );
 }
+
+
