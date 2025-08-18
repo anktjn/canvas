@@ -82,12 +82,20 @@ export function AppSidebar() {
 
   const createNewChat = async () => {
     try {
-      // Create a new conversation ID
       const newId = crypto.randomUUID()
-      // Navigate to the new chat
+      // set as current in localStorage so ChatConversation picks it up immediately
+      if (typeof window !== 'undefined') {
+        window.localStorage.setItem('chat:conversation-id', newId)
+      }
+      // Navigate to the new chat URL with ?c=
       router.push(`/?c=${newId}`)
-      // Refresh the list to show the new conversation
-      setTimeout(() => loadConversations(), 100)
+      // Optimistically add to the top of the list with a placeholder title
+      setConversations((prev) => [
+        { id: newId, title: null, created_at: new Date().toISOString(), updated_at: new Date().toISOString() },
+        ...prev,
+      ])
+      // Defer a background refresh
+      setTimeout(() => loadConversations(), 250)
     } catch (error) {
       console.error('Failed to create new chat:', error)
     }

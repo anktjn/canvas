@@ -2,6 +2,8 @@ import { z } from 'zod/v4';
 import type { Tool } from '@ai-sdk/provider-utils';
 import { retrieveFromKnowledgeBase } from '@/lib/rag/retrieve';
 import { fetchUnderutilizedLicensesSummary } from '@/lib/data/licenses';
+import { generateText } from 'ai';
+import { getDefaultModel } from '@/lib/ai/model';
 
 export type UIToolResponse = {
   ui?: { type: string; props?: Record<string, unknown> };
@@ -17,7 +19,7 @@ export const tools = {
     inputSchema: z.object({ query: z.string(), k: z.number().int().min(1).max(10).default(3) }),
     execute: async ({ query, k }) => {
       const result = await retrieveFromKnowledgeBase(query, k);
-      type Snippet = { id: string; url: string; content: string; score: number };
+      type Snippet = { id: string; url: string; title?: string; content: string; score: number };
       const snippets: Snippet[] = Array.isArray((result as { snippets?: Snippet[] })?.snippets)
         ? ((result as { snippets: Snippet[] }).snippets)
         : ([] as Snippet[]);
@@ -35,17 +37,57 @@ export const tools = {
         } as { ui: { type: 'card'; props: { title: string; body: string } } };
       }
 
+      // If nothing found, return a small info card so the UI never appears empty
+      if (snippets.length === 0) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'No knowledge-base results',
+              body: 'I could not find relevant Josys docs for this question. Try rephrasing or asking a more specific question.',
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
       // Provide a compact sources list for rendering citations/Sources UI
-      const sources = snippets.map((s, i): { id: string; url: string; label: string } => ({
+      const sources = snippets.map((s, i): { id: string; url: string; label: string; title?: string } => ({
         id: s.id,
         url: s.url,
+        title: s.title,
         label: `S${i + 1}`,
       }));
+
+      // Fallback: If the model does not compose an answer on its own, provide a concise summary
+      // synthesized from retrieved snippets. This guarantees that users see an answer plus sources.
+      let summary: string | undefined;
+      try {
+        if (snippets.length > 0) {
+          const context = snippets
+            .map((s, i) => `[S${i + 1}] ${s.content}`)
+            .join('\n\n');
+          const { text } = await generateText({
+            model: getDefaultModel(),
+            temperature: 0.2,
+            system:
+              'You are a helpful assistant for Josys. Using only the provided context snippets, write a short, accurate answer. Use clear bullets where helpful and avoid speculation. Include bracket citations like [S1], [S2] inline where facts come from. Keep it under 180 words.',
+            prompt: `User question: "${query}"\n\nContext snippets:\n${context}\n\nWrite the answer now.`,
+          });
+          summary = text;
+        }
+      } catch {
+        // Ignore summarization errors; still return sources/snippets
+      }
 
       return {
         snippets,
         sources,
-      } as { snippets: Snippet[]; sources: Array<{ id: string; url: string; label: string }> };
+        ...(summary ? { summary } : {}),
+      } as {
+        snippets: Snippet[];
+        sources: Array<{ id: string; url: string; title?: string; label: string }>;
+        summary?: string;
+      };
     },
   } satisfies Tool,
 

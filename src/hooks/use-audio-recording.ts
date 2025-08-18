@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from "react"
 
-import { recordAudio } from "@/components/lib/audio-utils"
+import { recordAudio } from "@/lib/audio-utils"
 
 interface UseAudioRecordingOptions {
   transcribeAudio?: (blob: Blob) => Promise<string>
@@ -37,7 +37,7 @@ export function useAudioRecording({
       recordAudio.stop()
       // Wait for the recording promise to resolve with the final blob
       const recording = await activeRecordingRef.current
-      if (transcribeAudio) {
+      if (transcribeAudio && recording) {
         const text = await transcribeAudio(recording)
         onTranscriptionComplete?.(text)
       }

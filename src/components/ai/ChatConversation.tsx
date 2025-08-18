@@ -2,9 +2,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as React from "react";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useChat } from "@ai-sdk/react";
-import { Conversation } from "@/components/ai-elements/conversation";
-import { Message } from "@/components/ai-elements/message";
+import { Conversation, ConversationContent, ConversationScrollButton } from "@/components/ai-elements/conversation";
+import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { PromptInput, PromptInputTextarea, PromptInputToolbar, PromptInputTools, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Loader } from "@/components/ai-elements/loader";
@@ -13,37 +14,65 @@ import { Card } from "@/components/ui/card";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Sources, SourcesContent, SourcesTrigger, Source } from "@/components/ai-elements/source";
 import { UnderutilizedLicensesCard } from "@/components/custom-components/UnderutilizedLicensesCard";
+import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
 
 export function ChatConversation() {
   const [conversationId, setConversationId] = React.useState<string>("");
-
-  React.useEffect(() => {
-    try {
-      const key = "chat:conversation-id";
-      const existing = typeof window !== "undefined" ? window.localStorage.getItem(key) : null;
-      const id = existing || crypto.randomUUID();
-      if (typeof window !== "undefined") window.localStorage.setItem(key, id);
-      setConversationId(id);
-    } catch {
-      setConversationId("default");
-    }
-  }, []);
+  const searchParams = useSearchParams();
+  const router = useRouter();
 
   const { messages, sendMessage, status, setMessages } = useChat();
+
+  React.useEffect(() => {
+    const idFromUrl = searchParams?.get('c');
+    const key = "chat:conversation-id";
+    const setLocal = (id: string) => {
+      if (typeof window !== 'undefined') window.localStorage.setItem(key, id);
+    };
+    if (idFromUrl && idFromUrl !== conversationId) {
+      setConversationId(idFromUrl);
+      setLocal(idFromUrl);
+      // clear chat UI for a fresh conversation
+      setMessages([] as any);
+      return;
+    }
+    if (!idFromUrl && !conversationId) {
+      try {
+        const existing = typeof window !== 'undefined' ? window.localStorage.getItem(key) : null;
+        const id = existing || crypto.randomUUID();
+        setLocal(id);
+        setConversationId(id);
+        // push id into URL for consistency
+        const qs = new URLSearchParams(searchParams ? Array.from(searchParams.entries()) : []);
+        qs.set('c', id);
+        router.replace(`/?${qs.toString()}`);
+      } catch {
+        setConversationId('default');
+      }
+    }
+  }, [searchParams, conversationId, router, setMessages]);
   const [input, setInput] = React.useState<string>("");
   const isLoading = status !== 'ready';
+  const DEBUG = process.env.NEXT_PUBLIC_DEBUG_CHAT === '1';
   const lastSavedAssistantId = React.useRef<string | null>(null);
   const prevStatus = React.useRef(status);
 
   function messageToText(msg: any): string {
     if (!msg) return '';
-    if (typeof msg?.content === 'string') return msg.content as string;
+    if (typeof msg?.content === 'string' && msg.content.length > 0) return msg.content as string;
     if (Array.isArray(msg?.parts)) {
-      const text = msg.parts
-        .filter((p: any) => p?.type === 'text' && typeof p?.text === 'string')
-        .map((p: any) => p.text)
-        .join('\n');
-      if (text) return text;
+      const buffer: string[] = [];
+      for (const p of msg.parts as any[]) {
+        if (!p) continue;
+        const t = String(p?.type ?? '');
+        // Accept normal text, streaming deltas, and user input_text payloads
+        if ((t === 'text' || t === 'input' || t === 'input_text' || t === 'input-text') && typeof p?.text === 'string') {
+          buffer.push(p.text);
+        }
+        if (t === 'text-delta' && typeof p?.textDelta === 'string') buffer.push(p.textDelta);
+      }
+      const joined = buffer.filter(Boolean).join('');
+      if (joined.trim().length > 0) return joined;
     }
     return '';
   }
@@ -130,36 +159,97 @@ export function ChatConversation() {
           ) : null}
 
           <Conversation>
+            <ConversationContent>
             {messages.map((m) => {
               const parts = (m as any)?.parts as any[] | undefined;
+              // Collect standard source-url parts for assistant messages
+              const msgSources = Array.isArray(parts)
+                ? parts.filter((p: any) => p?.type === 'source-url' && typeof p?.url === 'string')
+                : [];
+              if (DEBUG) {
+                try {
+                  // eslint-disable-next-line no-console
+                  console.log('chat:message', {
+                    id: (m as any)?.id,
+                    role: (m as any)?.role,
+                    content: (m as any)?.content,
+                    partTypes: Array.isArray(parts) ? parts.map((p) => p?.type) : null,
+                    text: messageToText(m),
+                  });
+                } catch {}
+              }
               return (
                 <Message key={m.id} from={m.role}>
-                  <Response>{typeof (m as any)?.content === "string" ? (m as any).content : ""}</Response>
+                  {m.role === 'assistant' ? (
+                    <div className="flex flex-col gap-2">
+                      {messageToText(m) ? (
+                        <MessageContent>
+                          <Response>{messageToText(m)}</Response>
+                        </MessageContent>
+                      ) : null}
+                      {msgSources.length > 0 ? (
+                        <Sources>
+                          <SourcesTrigger count={msgSources.length} />
+                          <SourcesContent>
+                            {msgSources.map((s: any, i: number) => (
+                              <Source key={`${m.id}-src-${i}`} href={s.url} title={s.title ?? s.url} />
+                            ))}
+                          </SourcesContent>
+                        </Sources>
+                      ) : null}
+                    </div>
+                  ) : (
+                    messageToText(m) ? (
+                      <MessageContent>
+                        <Response>{messageToText(m)}</Response>
+                      </MessageContent>
+                    ) : null
+                  )}
 
                   {Array.isArray(parts)
                     ? parts.map((part, idx) => {
                         const type = String(part?.type ?? "");
                         const state = part?.state as string | undefined;
-                        const input = part?.input;
                         const output = part?.output;
 
-                        // Tool lifecycle UI
-                        if (type.startsWith("tool-")) {
+                        // Reasoning parts (show only while streaming or if provided)
+                        if (type === "reasoning" && typeof part?.text === "string") {
                           return (
-                            <Tool key={`tool-${idx}`}>
-                              <ToolHeader type={type as any} state={(state as any) ?? "input-streaming"} />
-                              <ToolContent>
-                                {input ? <ToolInput input={input} /> : null}
-                                <ToolOutput
-                                  errorText={part?.errorText}
-                                  output={renderToolOutput(output)}
-                                />
-                              </ToolContent>
-                            </Tool>
+                            <Reasoning key={`rsn-${idx}`} className="w-full" isStreaming={status === 'streaming'}>
+                              <ReasoningTrigger />
+                              <ReasoningContent>{part.text}</ReasoningContent>
+                            </Reasoning>
                           );
                         }
 
-                        // Post-tool payloads embedded directly as data
+                        // For tool calls, only show the final output card (no headers/parameters)
+                        if (type.startsWith("tool-")) {
+                          if (state === "output-available" && output) {
+                            const hasRenderable = Boolean(output.ui) || typeof output.summary === 'string';
+                            if (!hasRenderable) return null; // hide raw tool data like {snippets}
+                            const srcs = Array.isArray(output.sources) ? (output.sources as Array<{ id: string; url: string; label?: string; title?: string }>) : null;
+                            return (
+                              <div key={`tool-out-${idx}`} className="flex flex-col gap-2">
+                                <MessageContent>
+                                  {renderToolOutput(output)}
+                                </MessageContent>
+                                {srcs ? (
+                                  <Sources>
+                                    <SourcesTrigger count={srcs.length} />
+                                    <SourcesContent>
+                                      {srcs.map((s) => (
+                                        <Source key={s.id} href={s.url} title={s.title ?? s.url} />
+                                      ))}
+                                    </SourcesContent>
+                                  </Sources>
+                                ) : null}
+                              </div>
+                            );
+                          }
+                          return null;
+                        }
+
+                        // Non-tool payloads (if any)
                         if (output?.sources && Array.isArray(output.sources)) {
                           const srcs = output.sources as Array<{ id: string; url: string; label?: string; title?: string }>;
                           return (
@@ -182,6 +272,8 @@ export function ChatConversation() {
             })}
 
             {isLoading ? <Loader>Thinking…</Loader> : null}
+            </ConversationContent>
+            <ConversationScrollButton />
           </Conversation>
         </div>
       </div>
@@ -217,6 +309,19 @@ function renderToolOutput(output: any): React.ReactNode {
   // Custom UI payloads
   if (output.ui && typeof output.ui?.type === "string") {
     const t = output.ui.type as string;
+    if (t === "card") {
+      const props = output.ui.props as { title?: string; body?: string };
+      return (
+        <Card className="w-full">
+          {props?.title ? (
+            <div className="border-b p-3 text-sm font-medium">{props.title}</div>
+          ) : null}
+          {props?.body ? (
+            <div className="p-3 text-sm whitespace-pre-wrap">{props.body}</div>
+          ) : null}
+        </Card>
+      );
+    }
     if (t === "underutilized-licenses-card") {
       return <UnderutilizedLicensesCard {...(output.ui.props ?? {})} />;
     }
