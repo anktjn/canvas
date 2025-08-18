@@ -22,6 +22,12 @@ export class SupabaseVectorStore implements KnowledgeStore {
       (row) => ({ id: String(row.id), url: row.url, content: row.content, score: row.score })
     );
   }
+
+  /** Delete all vector rows for a given source URL. */
+  async deleteByUrl(url: string): Promise<void> {
+    const { error } = await this.client.from(this.table).delete().eq('url', url);
+    if (error) throw error;
+  }
 }
 
 

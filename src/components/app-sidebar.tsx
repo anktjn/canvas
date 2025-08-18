@@ -20,6 +20,7 @@ import {
 } from "lucide-react"
 import { cn } from "@/lib/utils"
 import { RenameDialog } from "./rename-dialog"
+import Link from "next/link"
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -242,14 +243,19 @@ export function AppSidebar() {
               Chat
             </Button>
             
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2"
-            >
-              <Database className="h-4 w-4" />
-              Knowledge Base
-            </Button>
+            <Link href="/knowledge">
+              <Button
+                asChild={false}
+                variant="ghost"
+                size="sm"
+                className="w-full justify-start gap-2"
+              >
+                <>
+                  <Database className="h-4 w-4" />
+                  Knowledge Base
+                </>
+              </Button>
+            </Link>
             
             <Button
               variant="ghost"
@@ -377,6 +383,7 @@ export function AppSidebar() {
           isLoading={isRenaming}
         />
       )}
+
     </div>
   )
 }
