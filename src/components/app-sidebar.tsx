@@ -190,7 +190,7 @@ export function AppSidebar() {
   }
 
   return (
-    <div className="flex h-full w-160 flex-col border-r bg-background">
+    <div className="flex h-full w-84 flex-col border-r bg-background">
       {/* Header */}
       <div className="flex h-16 shrink-0 items-center justify-between border-b px-4">
         <div className="flex items-center gap-2">
@@ -290,31 +290,31 @@ export function AppSidebar() {
                 <div
                   key={conversation.id}
                   className={cn(
-                    "flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                    "grid grid-cols-[32px_1fr_32px] items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
                     currentConversationId === conversation.id && "bg-accent"
                   )}
                 >
+                  {/* Chat icon - fixed width */}
+                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
+                    <MessageSquare className="h-4 w-4" />
+                  </div>
+                  
+                  {/* Chat content - flexible but with reserved space for three dots */}
                   <div 
-                    className="flex-1 flex items-center gap-3 cursor-pointer min-w-0"
+                    className="min-w-0 cursor-pointer overflow-hidden"
                     onClick={() => selectConversation(conversation.id)}
                   >
-                    <div className="flex-shrink-0 flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                      <MessageSquare className="h-4 w-4" />
+                    <div className="font-medium truncate">
+                      {getConversationTitle(conversation)}
                     </div>
-                    
-                    <div className="min-w-0 flex-1">
-                      <div className="font-medium truncate">
-                        {getConversationTitle(conversation)}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{formatTimestamp(conversation.updated_at)}</span>
-                      </div>
+                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                      <Clock className="h-3 w-3 flex-shrink-0" />
+                      <span className="truncate">{formatTimestamp(conversation.updated_at)}</span>
                     </div>
                   </div>
 
                   {/* Three-dot menu - always visible with fixed width */}
-                  <div className="flex-shrink-0 ml-1">
+                  <div className="flex justify-end">
                     <DropdownMenu>
                       <DropdownMenuTrigger asChild>
                         <Button

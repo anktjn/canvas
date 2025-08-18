@@ -9,7 +9,7 @@ import { Message, MessageContent } from "@/components/ai-elements/message";
 import { Response } from "@/components/ai-elements/response";
 import { PromptInput, PromptInputTextarea, PromptInputToolbar, PromptInputTools, PromptInputSubmit } from "@/components/ai-elements/prompt-input";
 import { Loader } from "@/components/ai-elements/loader";
-import { Suggestion } from "@/components/ai-elements/suggestion";
+import { Suggestion, Suggestions } from "@/components/ai-elements/suggestion";
 import { Card } from "@/components/ui/card";
 import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
 import { Sources, SourcesContent, SourcesTrigger, Source } from "@/components/ai-elements/source";
@@ -56,6 +56,9 @@ export function ChatConversation() {
   const DEBUG = process.env.NEXT_PUBLIC_DEBUG_CHAT === '1';
   const lastSavedAssistantId = React.useRef<string | null>(null);
   const prevStatus = React.useRef(status);
+  const [aiSuggestions, setAiSuggestions] = React.useState<string[]>([]);
+  const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState<boolean>(false);
+  const lastSuggestionForAssistantId = React.useRef<string | null>(null);
 
   function messageToText(msg: any): string {
     if (!msg) return '';
@@ -118,6 +121,48 @@ export function ChatConversation() {
     }
   }, [status, messages, conversationId]);
 
+  // Fetch intelligent suggestions after assistant replies or on first load
+  React.useEffect(() => {
+    const fetchSuggestions = async () => {
+      try {
+        setIsLoadingSuggestions(true);
+        const payload = {
+          messages: (messages as any[]).slice(-8).map((m) => ({
+            role: String(m.role ?? 'user'),
+            text: messageToText(m),
+          })),
+          count: 3,
+        };
+        const res = await fetch('/api/suggestions', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        if (!res.ok) throw new Error('failed');
+        const data = await res.json();
+        if (Array.isArray(data?.suggestions)) setAiSuggestions(data.suggestions as string[]);
+      } catch {
+        // ignore
+      } finally {
+        setIsLoadingSuggestions(false);
+      }
+    };
+
+    // On empty conversation, load suggestions once
+    if ((messages as any[]).length === 0 && aiSuggestions.length === 0 && !isLoadingSuggestions) {
+      fetchSuggestions();
+      return;
+    }
+
+    // After an assistant message completes streaming, refresh suggestions once per assistant id
+    const last = (messages as any[])[(messages as any[]).length - 1];
+    if (!last || last.role !== 'assistant') return;
+    if (status !== 'ready') return;
+    if (lastSuggestionForAssistantId.current === last.id) return;
+    lastSuggestionForAssistantId.current = last.id as string;
+    fetchSuggestions();
+  }, [messages, status]);
+
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
@@ -142,21 +187,33 @@ export function ChatConversation() {
 
   return (
     <div className="flex h-full flex-col">
-      <div className="flex-1 overflow-y-auto p-6 min-h-0">
-        <div className="mx-auto max-w-4xl space-y-6">
-          {messages.length === 0 ? (
-            <Card className="w-full border-0 bg-gradient-to-br from-background to-muted/20 p-8 text-center">
+      {messages.length === 0 ? (
+        <div className="flex-1 flex items-center justify-center p-4">
+          <div className="mx-auto max-w-4xl w-full">
+            <Card className="w-full border-0 p-8 text-center shadow-none">
               <div className="mx-auto max-w-2xl space-y-3 text-left">
                 <h2 className="text-2xl font-semibold">Welcome to Canvas AI</h2>
                 <p className="text-muted-foreground">Start a conversation or use a suggestion below.</p>
                 <div className="flex flex-wrap gap-2 pt-2">
-                  <Suggestion onClick={(s) => setInput(s)} suggestion="Summarize our latest product update" />
-                  <Suggestion onClick={(s) => setInput(s)} suggestion="Show underutilized licenses" />
-                  <Suggestion onClick={(s) => setInput(s)} suggestion="What does our SSO setup require?" />
+                  {aiSuggestions.length > 0 ? (
+                    aiSuggestions.map((s) => (
+                      <Suggestion key={s} onClick={(val) => setInput(val)} suggestion={s} />
+                    ))
+                  ) : (
+                    <>
+                      <Suggestion onClick={(s) => setInput(s)} suggestion="Summarize our latest product update" />
+                      <Suggestion onClick={(s) => setInput(s)} suggestion="Show underutilized licenses" />
+                      <Suggestion onClick={(s) => setInput(s)} suggestion="What does our SSO setup require?" />
+                    </>
+                  )}
                 </div>
               </div>
             </Card>
-          ) : null}
+          </div>
+        </div>
+      ) : (
+        <div className="flex-1 overflow-y-auto p-6 min-h-0">
+          <div className="mx-auto max-w-4xl space-y-6">
 
           <Conversation>
             <ConversationContent>
@@ -222,8 +279,18 @@ export function ChatConversation() {
                           );
                         }
 
-                        // For tool calls, only show the final output card (no headers/parameters)
+                        // For tool calls, show a reasoning panel while the tool is running,
+                        // and only show the final output card when available
                         if (type.startsWith("tool-")) {
+                          if (state !== "output-available") {
+                            const toolName = type.slice(5) || 'tool';
+                            return (
+                              <Reasoning key={`tool-reasoning-${idx}`} className="w-full" isStreaming={status === 'streaming'}>
+                                <ReasoningTrigger />
+                                <ReasoningContent>{`Using ${toolName}…`}</ReasoningContent>
+                              </Reasoning>
+                            );
+                          }
                           if (state === "output-available" && output) {
                             const hasRenderable = Boolean(output.ui) || typeof output.summary === 'string';
                             if (!hasRenderable) return null; // hide raw tool data like {snippets}
@@ -277,8 +344,9 @@ export function ChatConversation() {
           </Conversation>
         </div>
       </div>
+      )}
 
-      <div className="border-t bg-background p-4 flex-shrink-0">
+      <div className="bg-background p-4 flex-shrink-0">
         <div className="mx-auto max-w-4xl">
           <PromptInput
             onSubmit={async (e) => {
@@ -288,6 +356,15 @@ export function ChatConversation() {
               setInput("");
             }}
           >
+            {aiSuggestions.length > 0 && status === 'ready' && messages.length > 0 ? (
+              <div className="px-2 pt-2">
+                <Suggestions>
+                  {aiSuggestions.slice(0, 3).map((s) => (
+                    <Suggestion key={s} suggestion={s} onClick={(val) => setInput(val)} />
+                  ))}
+                </Suggestions>
+              </div>
+            ) : null}
             <PromptInputTextarea
               value={input}
               onChange={(e) => setInput(e.target.value)}
