@@ -1,4 +1,5 @@
 "use client";
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 import * as React from "react";
 import { useChat } from "@ai-sdk/react";
@@ -9,6 +10,9 @@ import { PromptInput, PromptInputTextarea, PromptInputToolbar, PromptInputTools,
 import { Loader } from "@/components/ai-elements/loader";
 import { Suggestion } from "@/components/ai-elements/suggestion";
 import { Card } from "@/components/ui/card";
+import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/components/ai-elements/tool";
+import { Sources, SourcesContent, SourcesTrigger, Source } from "@/components/ai-elements/source";
+import { UnderutilizedLicensesCard } from "@/components/custom-components/UnderutilizedLicensesCard";
 
 export function ChatConversation() {
   const [conversationId, setConversationId] = React.useState<string>("");
@@ -25,11 +29,65 @@ export function ChatConversation() {
     }
   }, []);
 
-  const { messages, sendMessage, status, setMessages } = useChat({
-    body: conversationId ? { id: conversationId } : undefined,
-  });
+  const { messages, sendMessage, status, setMessages } = useChat();
   const [input, setInput] = React.useState<string>("");
   const isLoading = status !== 'ready';
+  const lastSavedAssistantId = React.useRef<string | null>(null);
+  const prevStatus = React.useRef(status);
+
+  function messageToText(msg: any): string {
+    if (!msg) return '';
+    if (typeof msg?.content === 'string') return msg.content as string;
+    if (Array.isArray(msg?.parts)) {
+      const text = msg.parts
+        .filter((p: any) => p?.type === 'text' && typeof p?.text === 'string')
+        .map((p: any) => p.text)
+        .join('\n');
+      if (text) return text;
+    }
+    return '';
+  }
+
+  React.useEffect(() => {
+    const wasStreaming = prevStatus.current === 'streaming';
+    const isReadyNow = status === 'ready';
+    prevStatus.current = status;
+    if (!wasStreaming || !isReadyNow) return;
+
+    const last = (messages as any[])[(messages as any[]).length - 1];
+    if (!last || last.role !== 'assistant') return;
+    if (lastSavedAssistantId.current === last.id) return;
+    const assistantText = messageToText(last);
+    if (!assistantText.trim()) return;
+
+    const prevUser = [...(messages as any[])].slice(0, -1).reverse().find((m) => m.role === 'user');
+    const userText = messageToText(prevUser);
+    const toPersist = [
+      prevUser && { id: prevUser.id as string, role: prevUser.role as 'user' | 'assistant' | 'system' | 'tool', text: userText },
+      { id: last.id as string, role: 'assistant' as const, text: assistantText },
+    ].filter(Boolean) as Array<{ id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string }>;
+
+    if (conversationId && toPersist.length > 0) {
+      fetch('/api/memory', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id: conversationId, messages: toPersist }),
+      })
+        .then(() => {
+          lastSavedAssistantId.current = last.id as string;
+        })
+        .catch(() => {});
+
+      if ((messages as any[]).length === 2 && prevUser) {
+        const title = userText.length > 50 ? userText.substring(0, 50) + '...' : userText;
+        fetch('/api/memory', {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: conversationId, title }),
+        }).catch(() => {});
+      }
+    }
+  }, [status, messages, conversationId]);
 
   React.useEffect(() => {
     let cancelled = false;
@@ -43,9 +101,9 @@ export function ChatConversation() {
         const restored = data.messages.map((m: { id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string }) => ({
           id: m.id,
           role: m.role,
-          content: m.text,
+          parts: [{ type: 'text', text: m.text }],
         }));
-        setMessages(restored as unknown as Array<{ id: string; role: string; content: string }>);
+        setMessages(restored as unknown as Array<any>);
       } catch {}
     })();
     return () => {
@@ -63,27 +121,65 @@ export function ChatConversation() {
                 <h2 className="text-2xl font-semibold">Welcome to Canvas AI</h2>
                 <p className="text-muted-foreground">Start a conversation or use a suggestion below.</p>
                 <div className="flex flex-wrap gap-2 pt-2">
-                  <Suggestion onClick={(s) => setInput(s)} text="Summarize our latest product update" />
-                  <Suggestion onClick={(s) => setInput(s)} text="Show underutilized licenses" />
-                  <Suggestion onClick={(s) => setInput(s)} text="What does our SSO setup require?" />
+                  <Suggestion onClick={(s) => setInput(s)} suggestion="Summarize our latest product update" />
+                  <Suggestion onClick={(s) => setInput(s)} suggestion="Show underutilized licenses" />
+                  <Suggestion onClick={(s) => setInput(s)} suggestion="What does our SSO setup require?" />
                 </div>
               </div>
             </Card>
           ) : null}
 
           <Conversation>
-            {messages.map((m) => (
-              <Message key={m.id} role={m.role}>
-                {/*
-                  Elements' Response automatically handles markdown, code fences, and styling.
-                  If the model emits code blocks, CodeBlock is used inside Response.
-                */}
-                <Response>{typeof m.content === "string" ? m.content : ""}</Response>
+            {messages.map((m) => {
+              const parts = (m as any)?.parts as any[] | undefined;
+              return (
+                <Message key={m.id} from={m.role}>
+                  <Response>{typeof (m as any)?.content === "string" ? (m as any).content : ""}</Response>
 
-                {/* Render tool events/results if present in message data parts (handled by Elements in typical setups) */}
-                {/* Example: <Tool name="retrieve" status="complete"> ... </Tool> */}
-              </Message>
-            ))}
+                  {Array.isArray(parts)
+                    ? parts.map((part, idx) => {
+                        const type = String(part?.type ?? "");
+                        const state = part?.state as string | undefined;
+                        const input = part?.input;
+                        const output = part?.output;
+
+                        // Tool lifecycle UI
+                        if (type.startsWith("tool-")) {
+                          return (
+                            <Tool key={`tool-${idx}`}>
+                              <ToolHeader type={type as any} state={(state as any) ?? "input-streaming"} />
+                              <ToolContent>
+                                {input ? <ToolInput input={input} /> : null}
+                                <ToolOutput
+                                  errorText={part?.errorText}
+                                  output={renderToolOutput(output)}
+                                />
+                              </ToolContent>
+                            </Tool>
+                          );
+                        }
+
+                        // Post-tool payloads embedded directly as data
+                        if (output?.sources && Array.isArray(output.sources)) {
+                          const srcs = output.sources as Array<{ id: string; url: string; label?: string; title?: string }>;
+                          return (
+                            <Sources key={`sources-${idx}`}>
+                              <SourcesTrigger count={srcs.length} />
+                              <SourcesContent>
+                                {srcs.map((s) => (
+                                  <Source key={s.id} href={s.url} title={s.title ?? s.url} />
+                                ))}
+                              </SourcesContent>
+                            </Sources>
+                          );
+                        }
+
+                        return null;
+                      })
+                    : null}
+                </Message>
+              );
+            })}
 
             {isLoading ? <Loader>Thinking…</Loader> : null}
           </Conversation>
@@ -96,7 +192,7 @@ export function ChatConversation() {
             onSubmit={async (e) => {
               e.preventDefault();
               if (!input.trim()) return;
-              await (sendMessage as unknown as (arg: unknown) => Promise<void>)({ content: input });
+              await (sendMessage as unknown as (arg: unknown) => Promise<void>)({ text: input });
               setInput("");
             }}
           >
@@ -114,6 +210,60 @@ export function ChatConversation() {
       </div>
     </div>
   );
+}
+
+function renderToolOutput(output: any): React.ReactNode {
+  if (!output) return null;
+  // Custom UI payloads
+  if (output.ui && typeof output.ui?.type === "string") {
+    const t = output.ui.type as string;
+    if (t === "underutilized-licenses-card") {
+      return <UnderutilizedLicensesCard {...(output.ui.props ?? {})} />;
+    }
+    if (t === "table") {
+      const props = output.ui.props as { columns: string[]; rows: Array<Record<string, unknown>> };
+      return (
+        <div className="w-full overflow-x-auto p-2">
+          <table className="min-w-full text-xs">
+            <thead>
+              <tr>
+                {props.columns.map((c) => (
+                  <th key={c} className="text-left p-2 font-medium border-b">
+                    {c}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {props.rows.map((row, idx) => (
+                <tr key={idx} className="border-b last:border-0">
+                  {props.columns.map((c) => (
+                    <td key={c} className="p-2 align-top">
+                      {String((row as any)[c] ?? "")}
+                    </td>
+                  ))}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      );
+    }
+  }
+
+  // Summaries or text payloads
+  if (typeof output.summary === "string") {
+    return <Response>{output.summary}</Response>;
+  }
+
+  // Fallback raw JSON in debug-friendly block
+  try {
+    return (
+      <pre className="p-3 text-xs overflow-x-auto">{JSON.stringify(output, null, 2)}</pre>
+    );
+  } catch {
+    return null;
+  }
 }
 
 
