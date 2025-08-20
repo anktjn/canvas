@@ -35,7 +35,7 @@ export function ChatMessage({
             </div>
           )}
           
-          <div className="bg-primary text-primary-foreground rounded-lg px-3 py-2 text-sm w-fit max-w-[85%] ml-auto">
+          <div className="bg-primary text-primary-foreground rounded-lg px-2 sm:px-3 py-2 text-xs sm:text-sm w-fit max-w-[85%] ml-auto">
             <Response>{content}</Response>
           </div>
         </div>
@@ -54,7 +54,7 @@ export function ChatMessage({
           </div>
         )}
         
-        <div className="bg-muted text-foreground rounded-lg px-3 py-2 text-sm w-fit max-w-[85%]">
+        <div className="bg-muted text-foreground rounded-lg px-2 sm:px-3 py-2 text-xs sm:text-sm w-fit max-w-[85%]">
           <Response>{content}</Response>
         </div>
       </div>

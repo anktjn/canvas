@@ -15,6 +15,7 @@ import { Tool, ToolContent, ToolHeader, ToolInput, ToolOutput } from "@/componen
 import { Sources, SourcesContent, SourcesTrigger, Source } from "@/components/ai-elements/source";
 import { UnderutilizedLicensesCard } from "@/components/custom-components/UnderutilizedLicensesCard";
 import { Reasoning, ReasoningContent, ReasoningTrigger } from "@/components/ai-elements/reasoning";
+import { WelcomeSuggestions } from "@/components/chat/WelcomeSuggestions";
 
 export function ChatConversation() {
   const [conversationId, setConversationId] = React.useState<string>("");
@@ -188,32 +189,14 @@ export function ChatConversation() {
   return (
     <div className="flex h-full flex-col">
       {messages.length === 0 ? (
-        <div className="flex-1 flex items-center justify-center p-4">
-          <div className="mx-auto max-w-4xl w-full">
-            <Card className="w-full border-0 p-8 text-center shadow-none">
-              <div className="mx-auto max-w-2xl space-y-3 text-left">
-                <h2 className="text-2xl font-semibold">Welcome to Canvas AI</h2>
-                <p className="text-muted-foreground">Start a conversation or use a suggestion below.</p>
-                <div className="flex flex-wrap gap-2 pt-2">
-                  {aiSuggestions.length > 0 ? (
-                    aiSuggestions.map((s) => (
-                      <Suggestion key={s} onClick={(val) => setInput(val)} suggestion={s} />
-                    ))
-                  ) : (
-                    <>
-                      <Suggestion onClick={(s) => setInput(s)} suggestion="Summarize our latest product update" />
-                      <Suggestion onClick={(s) => setInput(s)} suggestion="Show underutilized licenses" />
-                      <Suggestion onClick={(s) => setInput(s)} suggestion="What does our SSO setup require?" />
-                    </>
-                  )}
-                </div>
-              </div>
-            </Card>
-          </div>
-        </div>
+        <WelcomeSuggestions
+          aiSuggestions={aiSuggestions}
+          isLoadingSuggestions={isLoadingSuggestions}
+          onSuggestionClick={(suggestion) => setInput(suggestion)}
+        />
       ) : (
-        <div className="flex-1 overflow-y-auto p-6 min-h-0">
-          <div className="mx-auto max-w-4xl space-y-6">
+        <div className="flex-1 overflow-y-auto p-4 sm:p-6 min-h-0">
+          <div className="mx-auto min-w-sm max-w-4xl w-full space-y-6">
 
           <Conversation>
             <ConversationContent>
@@ -284,6 +267,37 @@ export function ChatConversation() {
                         if (type.startsWith("tool-")) {
                           if (state !== "output-available") {
                             const toolName = type.slice(5) || 'tool';
+                            if (toolName === 'underutilized_licenses_card') {
+                              // Defer skeleton to avoid layout jank for fast responses
+                              const [showSkeleton, setShowSkeleton] = React.useState(false);
+                              React.useEffect(() => {
+                                const t = setTimeout(() => setShowSkeleton(true), 600);
+                                return () => clearTimeout(t);
+                              }, []);
+                              return (
+                                <div key={`tool-reasoning-${idx}`} className="w-full flex flex-col gap-2">
+                                  <Reasoning className="w-full" isStreaming={status === 'streaming'}>
+                                    <ReasoningTrigger />
+                                    <ReasoningContent>{`Using ${toolName}…`}</ReasoningContent>
+                                  </Reasoning>
+                                  {showSkeleton ? (
+                                    <MessageContent>
+                                      <UnderutilizedLicensesCard
+                                        title="Underutilized Licenses"
+                                        organizationName={undefined}
+                                        totalLicenses={0}
+                                        underutilizedCount={0}
+                                        utilizationThresholdPercent={20}
+                                        measurementPeriodDays={30}
+                                        apps={new Array(3).fill(null).map((_, i) => ({ appName: ``, instanceName: '', accountsCount: 0 }))}
+                                        isLoading={true}
+                                        progressive={true}
+                                      />
+                                    </MessageContent>
+                                  ) : null}
+                                </div>
+                              );
+                            }
                             return (
                               <Reasoning key={`tool-reasoning-${idx}`} className="w-full" isStreaming={status === 'streaming'}>
                                 <ReasoningTrigger />
@@ -347,7 +361,7 @@ export function ChatConversation() {
       )}
 
       <div className="bg-background p-4 flex-shrink-0">
-        <div className="mx-auto max-w-4xl">
+        <div className="mx-auto min-w-sm max-w-4xl w-full">
           <PromptInput
             onSubmit={async (e) => {
               e.preventDefault();
