@@ -267,42 +267,28 @@ export function ChatConversation() {
                         if (type.startsWith("tool-")) {
                           if (state !== "output-available") {
                             const toolName = type.slice(5) || 'tool';
-                            if (toolName === 'underutilized_licenses_card') {
-                              // Defer skeleton to avoid layout jank for fast responses
-                              const [showSkeleton, setShowSkeleton] = React.useState(false);
-                              React.useEffect(() => {
-                                const t = setTimeout(() => setShowSkeleton(true), 600);
-                                return () => clearTimeout(t);
-                              }, []);
-                              return (
-                                <div key={`tool-reasoning-${idx}`} className="w-full flex flex-col gap-2">
-                                  <Reasoning className="w-full" isStreaming={status === 'streaming'}>
-                                    <ReasoningTrigger />
-                                    <ReasoningContent>{`Using ${toolName}…`}</ReasoningContent>
-                                  </Reasoning>
-                                  {showSkeleton ? (
-                                    <MessageContent>
-                                      <UnderutilizedLicensesCard
-                                        title="Underutilized Licenses"
-                                        organizationName={undefined}
-                                        totalLicenses={0}
-                                        underutilizedCount={0}
-                                        utilizationThresholdPercent={20}
-                                        measurementPeriodDays={30}
-                                        apps={new Array(3).fill(null).map((_, i) => ({ appName: ``, instanceName: '', accountsCount: 0 }))}
-                                        isLoading={true}
-                                        progressive={true}
-                                      />
-                                    </MessageContent>
-                                  ) : null}
-                                </div>
-                              );
-                            }
                             return (
-                              <Reasoning key={`tool-reasoning-${idx}`} className="w-full" isStreaming={status === 'streaming'}>
-                                <ReasoningTrigger />
-                                <ReasoningContent>{`Using ${toolName}…`}</ReasoningContent>
-                              </Reasoning>
+                              <div key={`tool-reasoning-${idx}`} className="w-full flex flex-col gap-2">
+                                <Reasoning className="w-full" isStreaming={status === 'streaming'}>
+                                  <ReasoningTrigger />
+                                  <ReasoningContent>{`Using ${toolName}…`}</ReasoningContent>
+                                </Reasoning>
+                                {toolName === 'underutilized_licenses_card' && (
+                                  <MessageContent>
+                                    <UnderutilizedLicensesCard
+                                      title="Underutilized Licenses"
+                                      organizationName={undefined}
+                                      totalLicenses={0}
+                                      underutilizedCount={0}
+                                      utilizationThresholdPercent={20}
+                                      measurementPeriodDays={30}
+                                      apps={new Array(3).fill(null).map((_, i) => ({ appName: ``, instanceName: '', accountsCount: 0 }))}
+                                      isLoading={true}
+                                      progressive={true}
+                                    />
+                                  </MessageContent>
+                                )}
+                              </div>
                             );
                           }
                           if (state === "output-available" && output) {

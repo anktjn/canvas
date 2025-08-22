@@ -28,6 +28,12 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu"
+import {
+  Sidebar,
+  SidebarContent,
+  SidebarHeader,
+  useSidebar
+} from "@/components/ui/sidebar"
 
 interface Conversation {
   id: string
@@ -40,6 +46,7 @@ export function AppSidebar() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const currentConversationId = searchParams.get('c')
+  const { state } = useSidebar()
   
   const [conversations, setConversations] = React.useState<Conversation[]>([])
   const [isLoading, setIsLoading] = React.useState(true)
@@ -190,188 +197,229 @@ export function AppSidebar() {
     return `Chat ${conversation.id.slice(0, 8)}`
   }
 
+  const isCollapsed = state === "collapsed"
+
   return (
-    <div className="flex h-full w-84 flex-col border-r bg-background">
-      {/* Header */}
-      <div className="flex h-16 shrink-0 items-center justify-between border-b px-4">
-        <div className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
-            <Sparkles className="h-4 w-4 text-primary-foreground" />
+    <Sidebar>
+      <SidebarHeader>
+        <div className="flex items-center justify-between w-full">
+          <div className="flex items-center gap-2">
+            <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary">
+              <Sparkles className="h-4 w-4 text-primary-foreground" />
+            </div>
+            <span className="font-semibold">Canvas AI</span>
           </div>
-          <span className="font-semibold">Canvas AI</span>
+          <ThemeToggle />
         </div>
-        <ThemeToggle />
-      </div>
+      </SidebarHeader>
 
-      {/* New Chat Button */}
-      <div className="p-4 flex gap-2">
-        <Button 
-          onClick={createNewChat}
-          className="flex-1 justify-start gap-2"
-          size="sm"
-        >
-          <Plus className="h-4 w-4" />
-          New Chat
-        </Button>
-        <Button
-          onClick={refreshConversations}
-          variant="outline"
-          size="sm"
-          className="px-2"
-          title="Refresh conversations"
-        >
-          <RefreshCw className="h-4 w-4" />
-        </Button>
-      </div>
+      <SidebarContent>
+        {/* New Chat Button */}
+        <div className="p-2 flex gap-2">
+          {!isCollapsed ? (
+            <>
+              <Button 
+                onClick={createNewChat}
+                className="flex-1 justify-start gap-2"
+                size="sm"
+              >
+                <Plus className="h-4 w-4" />
+                New Chat
+              </Button>
+              <Button
+                onClick={refreshConversations}
+                variant="outline"
+                size="sm"
+                className="px-2"
+                title="Refresh conversations"
+              >
+                <RefreshCw className="h-4 w-4" />
+              </Button>
+            </>
+          ) : (
+            <Button 
+              onClick={createNewChat}
+              variant="outline"
+              size="sm"
+              className="w-full"
+              title="New Chat"
+            >
+              <Plus className="h-4 w-4" />
+            </Button>
+          )}
+        </div>
 
-      <Separator />
+        <Separator />
 
-      {/* Navigation */}
-      <div className="flex-1 overflow-hidden">
-        <ScrollArea className="h-full">
-          <div className="space-y-2 p-2">
+        {/* Navigation */}
+        <div className="space-y-2 p-2">
+          {!isCollapsed && (
             <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Navigation
             </div>
-            
+          )}
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "w-full justify-start gap-2",
+              isCollapsed && "justify-center px-2"
+            )}
+            title={isCollapsed ? "Chat" : undefined}
+          >
+            <MessageSquare className="h-4 w-4" />
+            {!isCollapsed && "Chat"}
+          </Button>
+          
+          <Link href="/knowledge">
             <Button
+              asChild={false}
               variant="ghost"
               size="sm"
-              className="w-full justify-start gap-2"
+              className={cn(
+                "w-full justify-start gap-2",
+                isCollapsed && "justify-center px-2"
+              )}
+              title={isCollapsed ? "Knowledge Base" : undefined}
             >
-              <MessageSquare className="h-4 w-4" />
-              Chat
+              <>
+                <Database className="h-4 w-4" />
+                {!isCollapsed && "Knowledge Base"}
+              </>
             </Button>
-            
-            <Link href="/knowledge">
-              <Button
-                asChild={false}
-                variant="ghost"
-                size="sm"
-                className="w-full justify-start gap-2"
-              >
-                <>
-                  <Database className="h-4 w-4" />
-                  Knowledge Base
-                </>
-              </Button>
-            </Link>
-            
-            <Button
-              variant="ghost"
-              size="sm"
-              className="w-full justify-start gap-2"
-            >
-              <Settings className="h-4 w-4" />
-              Settings
-            </Button>
-          </div>
+          </Link>
+          
+          <Button
+            variant="ghost"
+            size="sm"
+            className={cn(
+              "w-full justify-start gap-2",
+              isCollapsed && "justify-center px-2"
+            )}
+            title={isCollapsed ? "Settings" : undefined}
+          >
+            <Settings className="h-4 w-4" />
+            {!isCollapsed && "Settings"}
+          </Button>
+        </div>
 
-          <Separator className="my-4" />
+        <Separator className="my-4" />
 
-          {/* Conversation History */}
-          <div className="space-y-2 p-2">
+        {/* Conversation History */}
+        <div className="space-y-2 p-2">
+          {!isCollapsed && (
             <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Recent Chats
             </div>
-            
-            {isLoading ? (
-              <div className="space-y-2">
-                {Array.from({ length: 3 }).map((_, i) => (
-                  <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2">
-                    <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+          )}
+          
+          {isLoading ? (
+            <div className="space-y-2">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div key={i} className="flex items-center gap-3 rounded-lg px-3 py-2">
+                  <div className="h-8 w-8 rounded-lg bg-muted animate-pulse" />
+                  {!isCollapsed && (
                     <div className="flex-1 space-y-1">
                       <div className="h-4 bg-muted rounded animate-pulse" />
                       <div className="h-3 bg-muted rounded w-20 animate-pulse" />
                     </div>
-                  </div>
-                ))}
-              </div>
-            ) : conversations.length === 0 ? (
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : conversations.length === 0 ? (
+            !isCollapsed && (
               <div className="px-3 py-2 text-sm text-muted-foreground">
                 No conversations yet
               </div>
-            ) : (
-              conversations.map((conversation) => (
-                <div
-                  key={conversation.id}
+            )
+          ) : (
+            conversations.map((conversation) => (
+              <div
+                key={conversation.id}
+                className={cn(
+                  "grid items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                  currentConversationId === conversation.id && "bg-accent",
+                  isCollapsed 
+                    ? "grid-cols-1 justify-center" 
+                    : "grid-cols-[32px_1fr_32px]"
+                )}
+              >
+                {/* Chat icon - fixed width */}
+                <div 
                   className={cn(
-                    "grid grid-cols-[32px_1fr_32px] items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
-                    currentConversationId === conversation.id && "bg-accent"
+                    "flex h-8 w-8 items-center justify-center rounded-lg bg-muted cursor-pointer",
+                    isCollapsed && "mx-auto"
                   )}
+                  onClick={() => selectConversation(conversation.id)}
+                  title={isCollapsed ? getConversationTitle(conversation) : undefined}
                 >
-                  {/* Chat icon - fixed width */}
-                  <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted">
-                    <MessageSquare className="h-4 w-4" />
-                  </div>
-                  
-                  {/* Chat content - flexible but with reserved space for three dots */}
-                  <div 
-                    className="min-w-0 cursor-pointer overflow-hidden"
-                    onClick={() => selectConversation(conversation.id)}
-                  >
-                    <div className="font-medium truncate">
-                      {getConversationTitle(conversation)}
-                    </div>
-                    <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                      <Clock className="h-3 w-3 flex-shrink-0" />
-                      <span className="truncate">{formatTimestamp(conversation.updated_at)}</span>
-                    </div>
-                  </div>
-
-                  {/* Three-dot menu - always visible with fixed width */}
-                  <div className="flex justify-end">
-                    <DropdownMenu>
-                      <DropdownMenuTrigger asChild>
-                        <Button
-                          variant="ghost"
-                          size="sm"
-                          className="h-8 w-8 p-0"
-                          onClick={(e) => e.stopPropagation()}
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
-                      </DropdownMenuTrigger>
-                      <DropdownMenuContent align="end" className="w-40">
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            handleRename(conversation)
-                          }}
-                          className="cursor-pointer"
-                        >
-                          <Edit className="mr-2 h-4 w-4" />
-                          Rename
-                        </DropdownMenuItem>
-                        <DropdownMenuSeparator />
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation()
-                            deleteConversation(conversation.id)
-                          }}
-                          className="cursor-pointer text-destructive focus:text-destructive"
-                          variant="destructive"
-                        >
-                          <Trash2 className="mr-2 h-4 w-4" />
-                          Delete
-                        </DropdownMenuItem>
-                      </DropdownMenuContent>
-                    </DropdownMenu>
-                  </div>
+                  <MessageSquare className="h-4 w-4" />
                 </div>
-              ))
-            )}
-          </div>
-        </ScrollArea>
-      </div>
+                
+                {/* Chat content - only show when not collapsed */}
+                {!isCollapsed && (
+                  <>
+                    <div 
+                      className="min-w-0 cursor-pointer overflow-hidden"
+                      onClick={() => selectConversation(conversation.id)}
+                    >
+                      <div className="font-medium truncate">
+                        {getConversationTitle(conversation)}
+                      </div>
+                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
+                        <Clock className="h-3 w-3 flex-shrink-0" />
+                        <span className="truncate">{formatTimestamp(conversation.updated_at)}</span>
+                      </div>
+                    </div>
 
-      {/* Footer */}
-      <div className="border-t p-4">
-        <div className="flex items-center gap-2 text-xs text-muted-foreground">
-          <div className="h-2 w-2 rounded-full bg-green-500" />
-          AI Assistant Online
+                    {/* Three-dot menu - always visible with fixed width */}
+                    <div className="flex justify-end">
+                      <DropdownMenu>
+                        <DropdownMenuTrigger asChild>
+                          <Button
+                            variant="ghost"
+                            size="sm"
+                            className="h-8 w-8 p-0"
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <MoreHorizontal className="h-4 w-4" />
+                          </Button>
+                        </DropdownMenuTrigger>
+                        <DropdownMenuContent align="end" className="w-40">
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              handleRename(conversation)
+                            }}
+                            className="cursor-pointer"
+                          >
+                            <Edit className="mr-2 h-4 w-4" />
+                            Rename
+                          </DropdownMenuItem>
+                          <DropdownMenuSeparator />
+                          <DropdownMenuItem
+                            onClick={(e) => {
+                              e.stopPropagation()
+                              deleteConversation(conversation.id)
+                            }}
+                            className="cursor-pointer text-destructive focus:text-destructive"
+                            variant="destructive"
+                          >
+                            <Trash2 className="mr-2 h-4 w-4" />
+                            Delete
+                          </DropdownMenuItem>
+                        </DropdownMenuContent>
+                      </DropdownMenu>
+                    </div>
+                  </>
+                )}
+              </div>
+            ))
+          )}
         </div>
-      </div>
+      </SidebarContent>
 
       {/* Rename Dialog */}
       {conversationToRename && (
@@ -383,7 +431,6 @@ export function AppSidebar() {
           isLoading={isRenaming}
         />
       )}
-
-    </div>
+    </Sidebar>
   )
 }
