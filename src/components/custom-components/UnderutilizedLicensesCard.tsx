@@ -1,5 +1,7 @@
 "use client";
 import React from 'react';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { ArrowUpDown } from 'lucide-react';
 
 export type UnderutilizedAppItem = {
   appName: string;
@@ -64,6 +66,31 @@ export const UnderutilizedLicensesCard: React.FC<UnderutilizedLicensesCardProps>
   const showList = stage >= 2;
   const showCta = stage >= 3;
 
+  // Sort options for apps
+  type AppSortOption = 'accounts-desc' | 'accounts-asc' | 'name-asc' | 'name-desc';
+  const [appSortBy, setAppSortBy] = React.useState<AppSortOption>('accounts-desc');
+
+  // Sort apps based on selection
+  const sortedApps = React.useMemo(() => {
+    if (!apps || apps.length === 0) return [];
+    const sorted = [...apps];
+    sorted.sort((a, b) => {
+      switch (appSortBy) {
+        case 'accounts-desc':
+          return b.accountsCount - a.accountsCount;
+        case 'accounts-asc':
+          return a.accountsCount - b.accountsCount;
+        case 'name-asc':
+          return a.appName.localeCompare(b.appName);
+        case 'name-desc':
+          return b.appName.localeCompare(a.appName);
+        default:
+          return 0;
+      }
+    });
+    return sorted;
+  }, [apps, appSortBy]);
+
   return (
     <div className="rounded-lg border p-4 min-w-sm max-w-lg bg-background" aria-busy={isLoading}>
       <div className="flex items-start justify-between gap-4">
@@ -88,9 +115,25 @@ export const UnderutilizedLicensesCard: React.FC<UnderutilizedLicensesCardProps>
       {showList ? (
         Array.isArray(apps) && apps.length > 0 ? (
           <div className="mt-4">
-            <div className="text-xs font-medium mb-2">Apps with underutilized accounts</div>
+            <div className="flex items-center justify-between mb-2">
+              <div className="text-xs font-medium">Apps with underutilized accounts</div>
+              {apps.length > 1 && (
+                <Select value={appSortBy} onValueChange={(value) => setAppSortBy(value as AppSortOption)}>
+                  <SelectTrigger className="h-7 text-xs w-[140px]">
+                    <ArrowUpDown className="h-3 w-3 mr-1" />
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="accounts-desc">Most Accounts</SelectItem>
+                    <SelectItem value="accounts-asc">Least Accounts</SelectItem>
+                    <SelectItem value="name-asc">Name (A-Z)</SelectItem>
+                    <SelectItem value="name-desc">Name (Z-A)</SelectItem>
+                  </SelectContent>
+                </Select>
+              )}
+            </div>
             <ul className="divide-y">
-              {(apps.slice(0, 5)).map((a, idx) => (
+              {(sortedApps.slice(0, 5)).map((a, idx) => (
                 <li key={`${a.appName}:${a.instanceName}`} className="flex items-center justify-between py-2 gap-4">
                   <div className="flex items-center gap-2 min-w-0">
                     <div className="bg-gradient-to-b from-[#fafafa] to-[#f1f1f3] rounded-md p-1.5">

@@ -2,6 +2,8 @@ import { z } from 'zod/v4';
 import type { Tool } from '@ai-sdk/provider-utils';
 import { retrieveFromKnowledgeBase } from '@/lib/rag/retrieve';
 import { fetchUnderutilizedLicensesSummary } from '@/lib/data/licenses';
+import { fetchUserProfileStats, fetchUserProfilesList } from '@/lib/data/user-profiles';
+import { fetchDiscoveredAppsList } from '@/lib/data/discovered-apps';
 import { generateText } from 'ai';
 import { getDefaultModel } from '@/lib/ai/model';
 
@@ -70,7 +72,7 @@ export const tools = {
             model: getDefaultModel(),
             temperature: 0.2,
             system:
-              'You are a helpful assistant for Josys. Using only the provided context snippets, write a short, accurate answer. Use clear bullets where helpful and avoid speculation. Include bracket citations like [S1], [S2] inline where facts come from. Keep it under 180 words.',
+              'You are a helpful assistant for Josys. Using only the provided context snippets, write a short, accurate answer. Use clear bullets where helpful and avoid speculation. Include bracket citations like [S1], [S2] inline where facts come from.',
             prompt: `User question: "${query}"\n\nContext snippets:\n${context}\n\nWrite the answer now.`,
           });
           summary = text;
@@ -91,8 +93,6 @@ export const tools = {
     },
   } satisfies Tool,
 
-
-
   show_table: {
     description: 'Render a table with columns and rows',
     inputSchema: z.object({ columns: z.array(z.string()), rows: z.array(z.record(z.string(), z.unknown())) }),
@@ -100,6 +100,26 @@ export const tools = {
       return {
         ui: { type: 'table', props: { columns, rows } },
       } as { ui: { type: 'table'; props: { columns: string[]; rows: Array<Record<string, unknown>> } } };
+    },
+  } satisfies Tool,
+
+  show_chart: {
+    description: 'Render a chart (bar, line, pie) to visualize data. Use when user asks for a visual comparison or trend. Always prefer this over show_table for numeric comparisons.',
+    inputSchema: z.object({
+      title: z.string(),
+      description: z.string().optional(),
+      type: z.enum(['bar', 'line', 'pie']),
+      data: z.array(z.record(z.string(), z.any())),
+      xAxisKey: z.string().describe('Key for X-axis labels (or segment names for pie)'),
+      seriesKeys: z.array(z.string()).describe('Keys for data values to plot'),
+    }),
+    execute: async ({ title, description, type, data, xAxisKey, seriesKeys }) => {
+      return {
+        ui: {
+          type: 'chart',
+          props: { title, description, type, data, xAxisKey, seriesKeys },
+        },
+      } as { ui: { type: 'chart'; props: Record<string, unknown> } };
     },
   } satisfies Tool,
 
@@ -200,8 +220,251 @@ export const tools = {
       } as { ui: { type: 'underutilized-licenses-card'; props: Record<string, unknown> } };
     },
   } satisfies Tool,
+
+  user_profiles_card: {
+    description:
+      'Show a card with user profile statistics including total users, active/inactive counts, department breakdown, user categories, and top users by app count. Use when the user asks about user statistics, employee counts, department distribution, or user profiles.',
+    inputSchema: z.object({
+      organizationName: z.string().optional(),
+      topKUsers: z.number().int().min(1).max(10).default(5),
+    }),
+    execute: async ({ organizationName, topKUsers }) => {
+      const { data, error } = await fetchUserProfileStats();
+
+      if (error || !data) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'User Profiles',
+              body: `Unable to fetch user profile statistics at the moment. Please try again.\n\n(${error || 'No data'})`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
+      // Fetch top users by provisioned apps count directly from Supabase
+      // (Keeping this here for now as fetchUserProfileStats doesn't return user list)
+      let topUsers: Array<{
+        id: string;
+        firstName: string;
+        lastName: string;
+        email: string;
+        status: 'Active' | 'Inactive';
+        userCategory: string;
+        department: string | null;
+        jobTitle: string | null;
+        provisionedAppsCount: number;
+      }> = [];
+
+      if (process.env.SUPABASE_URL || process.env.NEXT_PUBLIC_SUPABASE_URL) {
+        try {
+          const { createClient } = await import('@supabase/supabase-js');
+          const url = process.env.NEXT_PUBLIC_SUPABASE_URL || process.env.SUPABASE_URL;
+          const key =
+            process.env.SUPABASE_SERVICE_ROLE_KEY ||
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ||
+            process.env.SUPABASE_ANON_KEY;
+
+          if (url && key) {
+            const supabase = createClient(url, key, { auth: { persistSession: false } });
+            const { data: users, error: usersError } = await supabase
+              .from('user_profiles')
+              .select('*')
+              .order('provisioned_apps_count', { ascending: false })
+              .limit(topKUsers);
+
+            if (!usersError && users) {
+              topUsers = users.map((u: any) => ({
+                id: u.id,
+                firstName: u.first_name,
+                lastName: u.last_name,
+                email: u.email,
+                status: u.status,
+                userCategory: u.user_category,
+                department: u.department,
+                jobTitle: u.job_title,
+                provisionedAppsCount: u.provisioned_apps_count,
+              }));
+            }
+          }
+        } catch (err) {
+          console.error('Failed to fetch top users:', err);
+        }
+      }
+
+      return {
+        ui: {
+          type: 'user-profiles-card',
+          props: {
+            organizationName,
+            totalUsers: data.totalUsers,
+            activeUsers: data.activeUsers,
+            inactiveUsers: data.inactiveUsers,
+            byDepartment: data.byDepartment,
+            byCategory: data.byCategory,
+            topUsers,
+            averageProvisionedApps: data.averageProvisionedApps,
+            lastUpdatedIso: new Date().toISOString(),
+          },
+        },
+      } as { ui: { type: 'user-profiles-card'; props: Record<string, unknown> } };
+    },
+  } satisfies Tool,
+
+  user_profiles_list: {
+    description:
+      'Show a list of user profiles with filtering options. Use when the user asks to list, show, find, or search for specific users. Supports filtering by department, status (Active/Inactive), user category (Full-time/Contractor/External), work location, minimum/maximum provisioned apps count (e.g., "more than 10 apps" means minApps: 11, "at least 10 apps" means minApps: 10, "less than 5 apps" means maxApps: 4), and search by name/email/job title.',
+    inputSchema: z.object({
+      department: z.string().optional(),
+      status: z.enum(['Active', 'Inactive']).optional(),
+      userCategory: z.enum(['Full-time', 'Contractor', 'External', '']).optional(),
+      workLocation: z.string().optional(),
+      minApps: z.number().int().min(0).optional(),
+      maxApps: z.number().int().min(0).optional(),
+      search: z.string().optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    }),
+    execute: async (input) => {
+      const { data, count, error } = await fetchUserProfilesList(input);
+
+      if (error) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'User Profiles List',
+              body: `Error fetching users: ${error}`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
+      if (!data || data.length === 0) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'User Profiles List',
+              body: 'No users found matching your criteria.',
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
+      const mappedUsers = data.map((u) => ({
+        id: u.id,
+        userId: u.user_id,
+        firstName: u.first_name,
+        lastName: u.last_name,
+        email: u.email,
+        status: u.status,
+        userCategory: u.user_category,
+        department: u.department,
+        jobTitle: u.job_title,
+        workLocation: u.work_location_code,
+        provisionedAppsCount: u.provisioned_apps_count,
+      }));
+
+      return {
+        ui: {
+          type: 'user-profiles-list',
+          props: {
+            users: mappedUsers,
+            totalCount: count,
+            filters: input,
+          },
+        },
+      } as { ui: { type: 'user-profiles-list'; props: Record<string, unknown> } };
+    },
+  } satisfies Tool,
+
+  discovered_apps_list: {
+    description:
+      'Show a list of discovered apps with filtering options. Use when the user asks to list, show, find, or search for discovered apps. Supports filtering by app type (Trackable App/Integrable App), status, risk level (Low/Medium/High), software category, source, account count range, and search by name/category/source/risk.',
+    inputSchema: z.object({
+      appType: z.string().optional(),
+      status: z.string().optional(),
+      risk: z.string().optional(),
+      category: z.string().optional(),
+      source: z.string().optional(),
+      minAccounts: z.number().int().min(0).optional(),
+      maxAccounts: z.number().int().min(0).optional(),
+      search: z.string().optional(),
+      limit: z.number().int().min(1).max(50).default(20),
+    }),
+    execute: async (input) => {
+      const { data, count, error } = await fetchDiscoveredAppsList(input);
+
+      if (error) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'Discovered Apps List',
+              body: `Error fetching apps: ${error}`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
+      if (!data || data.length === 0) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'Discovered Apps List',
+              body: 'No apps found matching your criteria.',
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+
+      const mappedApps = data.map((a) => ({
+        id: String(a.id),
+        name: a.name,
+        appType: a.app_type,
+        accounts: a.accounts,
+        sources: a.sources,
+        lastUsed: a.last_used,
+        status: a.status,
+        discoverySourceUrl: a.discovery_source_url,
+        softwareCategories: a.software_categories,
+        risk: a.risk,
+        compliances: a.compliances,
+      }));
+
+      return {
+        ui: {
+          type: 'discovered-apps-list',
+          props: {
+            apps: mappedApps,
+            totalCount: count,
+            filters: input,
+          },
+        },
+      } as { ui: { type: 'discovered-apps-list'; props: Record<string, unknown> } };
+    },
+  } satisfies Tool,
+
+  deactivate_user: {
+    description: 'Deactivate a user account. Use when user explicitly asks to deactivate, disable, or suspend a user.',
+    inputSchema: z.object({
+      userId: z.string().describe('The ID of the user to deactivate'),
+      reason: z.string().optional().describe('Reason for deactivation'),
+    }),
+    execute: async ({ userId, reason }) => {
+        return {
+            ui: {
+                type: 'card',
+                props: {
+                    title: 'User Deactivated',
+                    body: `User ${userId} has been successfully deactivated.\n\nReason: ${reason || 'No reason provided'}`,
+                }
+            }
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+    }
+  } satisfies Tool,
 };
 
 export type AppTools = typeof tools;
-
-

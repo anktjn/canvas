@@ -1,3 +1,5 @@
+import { getSupabaseClient } from '@/lib/supabase';
+
 export type UserProfile = {
   id: string;
   user_id: string;
@@ -37,7 +39,7 @@ export type UserProfilesResponse = {
 };
 
 /**
- * Fetch user profiles from the API
+ * Fetch user profiles from the API (Client-side)
  * Uses the internal API route which queries Supabase
  */
 export async function fetchUserProfiles(
@@ -77,6 +79,59 @@ export async function fetchUserProfiles(
   }
 }
 
+export type FetchUserProfilesListInput = {
+  department?: string;
+  status?: 'Active' | 'Inactive';
+  userCategory?: 'Full-time' | 'Contractor' | 'External' | '';
+  workLocation?: string;
+  minApps?: number;
+  maxApps?: number;
+  search?: string;
+  limit?: number;
+};
+
+/**
+ * Fetch user profiles list directly from Supabase (Server-side)
+ */
+export async function fetchUserProfilesList(
+  input: FetchUserProfilesListInput
+): Promise<UserProfilesResponse> {
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return { error: 'Supabase not configured' };
+
+    let query = supabase
+      .from('user_profiles')
+      .select('*', { count: 'exact' })
+      .order('user_id', { ascending: true });
+
+    if (input.department) query = query.eq('department', input.department);
+    if (input.status) query = query.eq('status', input.status);
+    if (input.userCategory) query = query.eq('user_category', input.userCategory);
+    if (input.workLocation) query = query.eq('work_location_code', input.workLocation);
+    if (typeof input.minApps === 'number') query = query.gte('provisioned_apps_count', input.minApps);
+    if (typeof input.maxApps === 'number') query = query.lte('provisioned_apps_count', input.maxApps);
+    if (input.search) {
+      const s = input.search.replace(/%/g, '');
+      query = query.or(
+        `first_name.ilike.%${s}%,last_name.ilike.%${s}%,email.ilike.%${s}%,job_title.ilike.%${s}%`
+      );
+    }
+
+    const { data, error, count } = await query.limit(input.limit || 20);
+
+    if (error) return { error: error.message };
+    
+    return { 
+        data: data as UserProfile[], 
+        count: count ?? data?.length 
+    };
+
+  } catch (error) {
+    return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
+
 /**
  * Get user profile statistics for dashboard cards
  */
@@ -92,55 +147,64 @@ export type UserProfileStats = {
 
 export async function fetchUserProfileStats(): Promise<{ data?: UserProfileStats; error?: string }> {
   try {
-    // Fetch all user profiles for statistics
-    const response = await fetchUserProfiles({ limit: 1000 });
+    const supabase = await getSupabaseClient();
+    if (!supabase) return { error: 'Supabase not configured' };
     
-    if (response.error || !response.data) {
-      return { error: response.error || 'Failed to fetch user data' };
+    // Fetch all user profiles (up to 1000 for stats)
+    const { data: users, error: queryError } = await supabase
+      .from('user_profiles')
+      .select('*')
+      .order('user_id', { ascending: true })
+      .limit(1000);
+
+    if (queryError) {
+      return { error: queryError.message };
     }
 
-    const users = response.data;
+    if (!users || users.length === 0) {
+      return { error: 'No user data found' };
+    }
     
     // Calculate statistics
     const totalUsers = users.length;
-    const activeUsers = users.filter(u => u.status === 'Active').length;
+    const activeUsers = users.filter((u: UserProfile) => u.status === 'Active').length;
     const inactiveUsers = totalUsers - activeUsers;
     
     // Department breakdown
-    const departmentCounts = users.reduce((acc, user) => {
+    const departmentCounts = users.reduce((acc: Record<string, number>, user: UserProfile) => {
       const dept = user.department || 'Unknown';
       acc[dept] = (acc[dept] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
     
     const byDepartment = Object.entries(departmentCounts)
-      .map(([department, count]) => ({ department, count }))
+      .map(([department, count]) => ({ department, count: count as number }))
       .sort((a, b) => b.count - a.count);
     
     // Category breakdown
-    const categoryCounts = users.reduce((acc, user) => {
+    const categoryCounts = users.reduce((acc: Record<string, number>, user: UserProfile) => {
       const category = user.user_category || 'Unknown';
       acc[category] = (acc[category] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
     
     const byCategory = Object.entries(categoryCounts)
-      .map(([category, count]) => ({ category, count }))
+      .map(([category, count]) => ({ category, count: count as number }))
       .sort((a, b) => b.count - a.count);
     
     // Location breakdown
-    const locationCounts = users.reduce((acc, user) => {
+    const locationCounts = users.reduce((acc: Record<string, number>, user: UserProfile) => {
       const location = user.work_location_code || 'Unknown';
       acc[location] = (acc[location] || 0) + 1;
       return acc;
-    }, {} as Record<string, number>);
+    }, {});
     
     const byLocation = Object.entries(locationCounts)
-      .map(([location, count]) => ({ location, count }))
+      .map(([location, count]) => ({ location, count: count as number }))
       .sort((a, b) => b.count - a.count);
     
     // Average provisioned apps
-    const totalApps = users.reduce((sum, user) => sum + user.provisioned_apps_count, 0);
+    const totalApps = users.reduce((sum: number, user: UserProfile) => sum + user.provisioned_apps_count, 0);
     const averageProvisionedApps = totalUsers > 0 ? Math.round((totalApps / totalUsers) * 10) / 10 : 0;
     
     const stats: UserProfileStats = {

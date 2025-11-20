@@ -1,3 +1,5 @@
+import { getSupabaseClient } from '@/lib/supabase';
+
 export type DiscoveredApp = {
   id: string;
   name: string;
@@ -34,7 +36,7 @@ export type DiscoveredAppsResponse = {
 };
 
 /**
- * Fetch discovered apps from the internal API route
+ * Fetch discovered apps from the internal API route (Client-side)
  */
 export async function fetchDiscoveredApps(
   input: FetchDiscoveredAppsInput = {}
@@ -73,4 +75,50 @@ export async function fetchDiscoveredApps(
   }
 }
 
+/**
+ * Fetch discovered apps list directly from Supabase (Server-side)
+ */
+export async function fetchDiscoveredAppsList(
+  input: FetchDiscoveredAppsInput
+): Promise<DiscoveredAppsResponse> {
+  try {
+    const supabase = await getSupabaseClient();
+    if (!supabase) return { error: 'Supabase not configured' };
 
+    let query = supabase
+      .from('discovered_apps_catalog')
+      .select('*', { count: 'exact' })
+      .order('name', { ascending: true });
+
+    if (input.appType) query = query.eq('app_type', input.appType);
+    if (input.status) query = query.eq('status', input.status);
+    if (input.risk) query = query.eq('risk', input.risk);
+    if (typeof input.minAccounts === 'number') query = query.gte('accounts', input.minAccounts);
+    if (typeof input.maxAccounts === 'number') query = query.lte('accounts', input.maxAccounts);
+    if (input.category) {
+      const c = input.category.replace(/%/g, '');
+      query = query.ilike('software_categories', `%${c}%`);
+    }
+    if (input.source) {
+      const s = input.source.replace(/%/g, '');
+      query = query.ilike('sources', `%${s}%`);
+    }
+    if (input.search) {
+      const s = input.search.replace(/%/g, '');
+      query = query.or(
+        `name.ilike.%${s}%,discovery_source_url.ilike.%${s}%,software_categories.ilike.%${s}%,risk.ilike.%${s}%`
+      );
+    }
+
+    const { data, error, count } = await query.limit(input.limit || 20);
+
+    if (error) return { error: error.message };
+    
+    return { 
+        data: data as DiscoveredApp[], 
+        count: count ?? data?.length 
+    };
+  } catch (error) {
+     return { error: error instanceof Error ? error.message : 'Unknown error' };
+  }
+}
