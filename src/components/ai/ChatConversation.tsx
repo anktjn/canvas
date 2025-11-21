@@ -197,9 +197,19 @@ export function ChatConversation() {
     const prevUser = [...(messages as any[])].slice(0, -1).reverse().find((m) => m.role === 'user');
     const userText = messageToText(prevUser);
     const toPersist = [
-      prevUser && { id: prevUser.id as string, role: prevUser.role as 'user' | 'assistant' | 'system' | 'tool', text: userText },
-      { id: last.id as string, role: 'assistant' as const, text: assistantText },
-    ].filter(Boolean) as Array<{ id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string }>;
+      prevUser && { 
+        id: prevUser.id as string, 
+        role: prevUser.role as 'user' | 'assistant' | 'system' | 'tool', 
+        text: userText,
+        parts: Array.isArray(prevUser.parts) ? prevUser.parts : undefined,
+      },
+      { 
+        id: last.id as string, 
+        role: 'assistant' as const, 
+        text: assistantText,
+        parts: Array.isArray(last.parts) ? last.parts : undefined,
+      },
+    ].filter(Boolean) as Array<{ id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string; parts?: any[] }>;
 
     if (conversationId && toPersist.length > 0) {
       fetch('/api/memory', {
@@ -274,10 +284,13 @@ export function ChatConversation() {
         if (!res.ok) return;
         const data = await res.json();
         if (!data?.messages || cancelled) return;
-        const restored = data.messages.map((m: { id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string }) => ({
+        const restored = data.messages.map((m: { id: string; role: 'user' | 'assistant' | 'system' | 'tool'; text: string; parts?: any[] }) => ({
           id: m.id,
           role: m.role,
-          parts: [{ type: 'text', text: m.text }],
+          // If we have full parts (with tool outputs), use them; otherwise fall back to text-only
+          parts: Array.isArray(m.parts) && m.parts.length > 0 
+            ? m.parts 
+            : [{ type: 'text', text: m.text }],
         }));
         setMessages(restored as unknown as Array<any>);
       } catch {}

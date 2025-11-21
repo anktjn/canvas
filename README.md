@@ -26,13 +26,15 @@ SUPABASE_URL=...
 SUPABASE_SERVICE_ROLE_KEY=...
 ```
 
-Create Supabase schema (pgvector):
+Create Supabase schema (pgvector + chat persistence):
 
-```
+Run the SQL in `supabase-schema.sql` or run these commands:
+
+```sql
 -- enable extension
 create extension if not exists vector;
 
--- documents table
+-- documents table for RAG
 create table if not exists public.documents (
   id bigserial primary key,
   url text not null,
@@ -56,7 +58,32 @@ create or replace function public.match_documents(
   order by d.embedding <=> query_embedding
   limit match_count;
 $$;
+
+-- chat conversations table
+create table if not exists public.chat_conversations (
+  id uuid primary key default gen_random_uuid(),
+  title text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
+-- chat messages table with full message structure support
+create table if not exists public.chat_messages (
+  id bigserial primary key,
+  conversation_id uuid not null references public.chat_conversations(id) on delete cascade,
+  external_id text not null unique,
+  role text not null check (role in ('user', 'assistant', 'system', 'tool')),
+  content text not null default '',
+  parts jsonb, -- stores full message structure including tool outputs
+  created_at timestamptz not null default now()
+);
+
+-- indexes for performance
+create index if not exists idx_chat_messages_external_id on public.chat_messages(external_id);
+create index if not exists idx_chat_messages_conversation_id on public.chat_messages(conversation_id);
 ```
+
+**Important**: The `parts` column stores the complete message structure including tool outputs with UI components (charts, cards, etc.). This ensures that when you reload a conversation, all interactive components are restored exactly as they appeared.
 
 API routes:
 

@@ -2,10 +2,20 @@ import { createClient, type SupabaseClient } from '@supabase/supabase-js';
 
 export type ChatRole = 'user' | 'assistant' | 'system' | 'tool';
 
+export type MessagePart = {
+  type?: string;
+  text?: string;
+  textDelta?: string;
+  state?: string;
+  output?: unknown;
+  [key: string]: unknown;
+};
+
 export type PersistedMessage = {
   id: string; // external client message id from useChat
   role: ChatRole;
-  text: string;
+  text: string; // human-readable text for display/search
+  parts?: MessagePart[]; // full message structure including tool outputs
   createdAt?: string;
 };
 
@@ -62,6 +72,7 @@ export async function saveMessages(conversationId: string, messages: PersistedMe
     external_id: m.id,
     role: m.role,
     content: m.text,
+    parts: m.parts ? JSON.stringify(m.parts) : null, // Store full message structure
     created_at: m.createdAt ?? new Date().toISOString(),
   }));
   const { error } = await client
@@ -74,18 +85,37 @@ export async function loadMessages(conversationId: string, limit = 200): Promise
   const client = getServiceClient();
   const { data, error } = await client
     .from('chat_messages')
-    .select('external_id, role, content, created_at')
+    .select('external_id, role, content, parts, created_at')
     .eq('conversation_id', conversationId)
     .order('created_at', { ascending: true })
     .limit(limit);
   if (error) throw error;
-  type Row = { external_id: string; role: ChatRole; content: string; created_at: string };
-  return (data ?? []).map((row: Row) => ({
-    id: row.external_id,
-    role: row.role,
-    text: row.content,
-    createdAt: row.created_at,
-  }));
+  type Row = { 
+    external_id: string; 
+    role: ChatRole; 
+    content: string; 
+    parts: string | null;
+    created_at: string;
+  };
+  return (data ?? []).map((row: Row) => {
+    let parts: MessagePart[] | undefined;
+    if (row.parts) {
+      try {
+        const parsed = typeof row.parts === 'string' ? JSON.parse(row.parts) : row.parts;
+        parts = Array.isArray(parsed) ? parsed : undefined;
+      } catch {
+        // If parsing fails, we'll fall back to text-only
+      }
+    }
+    
+    return {
+      id: row.external_id,
+      role: row.role,
+      text: row.content,
+      parts,
+      createdAt: row.created_at,
+    };
+  });
 }
 
 export async function deleteConversation(conversationId: string): Promise<void> {

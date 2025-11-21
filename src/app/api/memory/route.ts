@@ -38,7 +38,13 @@ export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const id: string | undefined = body?.id;
-    type IncomingMessage = { id?: string; role: 'user' | 'assistant' | 'system' | 'tool'; text?: string; content?: string; parts?: Array<{ type?: string; text?: string }> };
+    type IncomingMessage = { 
+      id?: string; 
+      role: 'user' | 'assistant' | 'system' | 'tool'; 
+      text?: string; 
+      content?: string; 
+      parts?: Array<{ type?: string; text?: string; [key: string]: unknown }> 
+    };
     const messages: IncomingMessage[] = Array.isArray(body?.messages) ? (body.messages as IncomingMessage[]) : [];
     if (!id) return NextResponse.json({ error: 'Missing id' }, { status: 400 });
     if (!messages.length) return NextResponse.json({ ok: true });
@@ -65,6 +71,7 @@ export async function POST(req: NextRequest) {
                 .map((p) => String(p.text))
                 .join('\n')
             : '',
+        parts: Array.isArray(m.parts) ? m.parts : undefined, // Store full parts structure
       }));
 
     await saveMessages(conv.id, toPersist);
