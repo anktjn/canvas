@@ -104,22 +104,34 @@ export const tools = {
   } satisfies Tool,
 
   show_chart: {
-    description: 'Render a chart (bar, line, pie) to visualize data. Use when user asks for a visual comparison or trend. Always prefer this over show_table for numeric comparisons.',
+    description: 'Render a chart (bar, line, area, pie) to visualize data. Use when user asks for a visual comparison or trend. Always prefer this over show_table for numeric comparisons.',
     inputSchema: z.object({
       title: z.string(),
       description: z.string().optional(),
-      type: z.enum(['bar', 'line', 'pie']),
-      data: z.array(z.record(z.string(), z.any())),
+      type: z.enum(['bar', 'line', 'area', 'pie']),
+      data: z.array(z.record(z.string(), z.union([z.string(), z.number()]))),
       xAxisKey: z.string().describe('Key for X-axis labels (or segment names for pie)'),
       seriesKeys: z.array(z.string()).describe('Keys for data values to plot'),
     }),
     execute: async ({ title, description, type, data, xAxisKey, seriesKeys }) => {
-      return {
-        ui: {
-          type: 'chart',
-          props: { title, description, type, data, xAxisKey, seriesKeys },
-        },
-      } as { ui: { type: 'chart'; props: Record<string, unknown> } };
+      try {
+        return {
+          ui: {
+            type: 'chart',
+            props: { title, description, type, data, xAxisKey, seriesKeys },
+          },
+        } as { ui: { type: 'chart'; props: Record<string, unknown> } };
+      } catch (error) {
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'Error Generating Chart',
+              body: `An error occurred while generating the chart: ${String(error)}`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
     },
   } satisfies Tool,
 
@@ -464,6 +476,357 @@ export const tools = {
             }
         } as { ui: { type: 'card'; props: { title: string; body: string } } };
     }
+  } satisfies Tool,
+
+  visualize_user_profiles: {
+    description: 'Create visualizations for user profile data from Supabase. Use to show department distribution, user categories, work locations, or status breakdown as charts.',
+    inputSchema: z.object({
+      visualization: z.enum(['department', 'category', 'location', 'status']).describe('Type of visualization to create'),
+      chartType: z.enum(['bar', 'pie', 'line', 'area']).default('bar').describe('Chart type'),
+      title: z.string().optional().describe('Custom chart title'),
+    }),
+    execute: async ({ visualization, chartType, title }) => {
+      try {
+        const { data: stats, error } = await fetchUserProfileStats();
+        
+        if (error) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: 'User Profile Visualization',
+                body: `Unable to fetch user profile data from Supabase.\n\nError: ${error}\n\nPlease ensure your Supabase connection is configured correctly and the user_profiles table exists.`,
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        if (!stats) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: 'User Profile Visualization',
+                body: 'No user profile data available. The database may be empty or the table may not exist yet.',
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        let chartData: Array<Record<string, any>> = [];
+        let xKey = '';
+        let seriesKeys = ['count'];
+        let chartTitle = title || '';
+
+        switch (visualization) {
+          case 'department':
+            if (!stats.byDepartment || stats.byDepartment.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'Users by Department',
+                    body: 'No department data available. Users may not have department information assigned.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            chartData = stats.byDepartment.map(d => ({ name: d.department || 'Unknown', count: d.count }));
+            xKey = 'name';
+            chartTitle = chartTitle || 'Users by Department';
+            break;
+          case 'category':
+            if (!stats.byCategory || stats.byCategory.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'Users by Category',
+                    body: 'No category data available. Users may not have category information assigned.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            chartData = stats.byCategory.map(c => ({ name: c.category || 'Unknown', count: c.count }));
+            xKey = 'name';
+            chartTitle = chartTitle || 'Users by Category';
+            break;
+          case 'location':
+            if (!stats.byLocation || stats.byLocation.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'Users by Work Location',
+                    body: 'No location data available. Users may not have work location information assigned.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            chartData = stats.byLocation.map(l => ({ name: l.location || 'Unknown', count: l.count }));
+            xKey = 'name';
+            chartTitle = chartTitle || 'Users by Work Location';
+            break;
+          case 'status':
+            if (stats.totalUsers === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'User Status Distribution',
+                    body: 'No users found in the system.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            chartData = [
+              { name: 'Active', count: stats.activeUsers },
+              { name: 'Inactive', count: stats.inactiveUsers },
+            ];
+            xKey = 'name';
+            chartTitle = chartTitle || 'User Status Distribution';
+            break;
+        }
+
+        // Final validation before returning chart
+        if (!chartData || chartData.length === 0) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: chartTitle || 'User Profile Visualization',
+                body: 'No data available to visualize for the selected criteria.',
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        return {
+          ui: {
+            type: 'chart',
+            props: {
+              title: chartTitle,
+              description: `Showing ${chartData.length} ${chartData.length === 1 ? 'item' : 'items'}`,
+              type: chartType,
+              data: chartData,
+              xAxisKey: xKey,
+              seriesKeys,
+            },
+          },
+        } as { ui: { type: 'chart'; props: Record<string, unknown> } };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error('visualize_user_profiles error:', error);
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'Visualization Error',
+              body: `An unexpected error occurred while creating the visualization:\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+    },
+  } satisfies Tool,
+
+  visualize_discovered_apps: {
+    description: 'Create visualizations for discovered apps data from Supabase. Use to show risk distribution, app types, account usage, or category breakdown as charts.',
+    inputSchema: z.object({
+      visualization: z.enum(['risk', 'type', 'top_by_accounts', 'category']).describe('Type of visualization'),
+      chartType: z.enum(['bar', 'pie', 'line', 'area']).default('bar').describe('Chart type'),
+      limit: z.number().int().min(5).max(20).default(10).describe('Number of items for top_by_accounts'),
+      title: z.string().optional().describe('Custom chart title'),
+    }),
+    execute: async ({ visualization, chartType, limit, title }) => {
+      try {
+        // Fetch all discovered apps for aggregation
+        const { data: apps, error } = await fetchDiscoveredAppsList({ limit: 1000 });
+        
+        if (error) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: 'Discovered Apps Visualization',
+                body: `Unable to fetch discovered apps data from Supabase.\n\nError: ${error}\n\nPlease ensure your Supabase connection is configured correctly and the discovered_apps_catalog table exists.`,
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        if (!apps || apps.length === 0) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: 'Discovered Apps Visualization',
+                body: 'No discovered apps data available. The database may be empty or no apps have been discovered yet.',
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        let chartData: Array<Record<string, any>> = [];
+        let xKey = '';
+        let seriesKeys = ['count'];
+        let chartTitle = title || '';
+
+        switch (visualization) {
+          case 'risk': {
+            const riskCounts: Record<string, number> = {};
+            apps.forEach(app => {
+              const risk = app.risk || 'Unknown';
+              riskCounts[risk] = (riskCounts[risk] || 0) + 1;
+            });
+            chartData = Object.entries(riskCounts)
+              .map(([name, count]) => ({ name, count }))
+              .sort((a, b) => b.count - a.count);
+            xKey = 'name';
+            seriesKeys = ['count'];
+            chartTitle = chartTitle || 'Apps by Risk Level';
+            
+            if (chartData.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: chartTitle,
+                    body: 'No risk data available for discovered apps.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            break;
+          }
+          case 'type': {
+            const typeCounts: Record<string, number> = {};
+            apps.forEach(app => {
+              const type = app.app_type || 'Unknown';
+              typeCounts[type] = (typeCounts[type] || 0) + 1;
+            });
+            chartData = Object.entries(typeCounts)
+              .map(([name, count]) => ({ name, count }))
+              .sort((a, b) => b.count - a.count);
+            xKey = 'name';
+            seriesKeys = ['count'];
+            chartTitle = chartTitle || 'Apps by Type';
+            
+            if (chartData.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: chartTitle,
+                    body: 'No app type data available.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            break;
+          }
+          case 'top_by_accounts': {
+            const filtered = apps.filter(app => app.accounts !== null && app.accounts > 0);
+            
+            if (filtered.length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'Top Apps by Account Count',
+                    body: 'No apps with account data available.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            
+            const sorted = filtered
+              .sort((a, b) => (b.accounts || 0) - (a.accounts || 0))
+              .slice(0, limit);
+            chartData = sorted.map(app => ({ 
+              name: app.name || 'Unknown', 
+              accounts: app.accounts || 0 
+            }));
+            xKey = 'name';
+            seriesKeys = ['accounts'];
+            chartTitle = chartTitle || `Top ${Math.min(limit, sorted.length)} Apps by Account Count`;
+            break;
+          }
+          case 'category': {
+            const categoryCounts: Record<string, number> = {};
+            apps.forEach(app => {
+              if (app.software_categories) {
+                const categories = app.software_categories.split(',').map(c => c.trim());
+                categories.forEach(cat => {
+                  if (cat) {
+                    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
+                  }
+                });
+              }
+            });
+            
+            if (Object.keys(categoryCounts).length === 0) {
+              return {
+                ui: {
+                  type: 'card',
+                  props: {
+                    title: 'Top Software Categories',
+                    body: 'No software category data available for discovered apps.',
+                  },
+                },
+              } as { ui: { type: 'card'; props: { title: string; body: string } } };
+            }
+            
+            const topCategories = Object.entries(categoryCounts)
+              .sort((a, b) => b[1] - a[1])
+              .slice(0, 10);
+            chartData = topCategories.map(([name, count]) => ({ name, count }));
+            xKey = 'name';
+            seriesKeys = ['count'];
+            chartTitle = chartTitle || 'Top Software Categories';
+            break;
+          }
+        }
+
+        if (!chartData || chartData.length === 0) {
+          return {
+            ui: {
+              type: 'card',
+              props: {
+                title: chartTitle || 'Discovered Apps Visualization',
+                body: 'No data available to visualize for the selected criteria.',
+              },
+            },
+          } as { ui: { type: 'card'; props: { title: string; body: string } } };
+        }
+
+        return {
+          ui: {
+            type: 'chart',
+            props: {
+              title: chartTitle,
+              description: `Showing ${chartData.length} ${chartData.length === 1 ? 'item' : 'items'}`,
+              type: chartType,
+              data: chartData,
+              xAxisKey: xKey,
+              seriesKeys,
+            },
+          },
+        } as { ui: { type: 'chart'; props: Record<string, unknown> } };
+      } catch (error) {
+        const errorMessage = error instanceof Error ? error.message : 'Unknown error occurred';
+        console.error('visualize_discovered_apps error:', error);
+        return {
+          ui: {
+            type: 'card',
+            props: {
+              title: 'Visualization Error',
+              body: `An unexpected error occurred while creating the visualization:\n\n${errorMessage}\n\nPlease try again or contact support if the issue persists.`,
+            },
+          },
+        } as { ui: { type: 'card'; props: { title: string; body: string } } };
+      }
+    },
   } satisfies Tool,
 };
 

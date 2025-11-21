@@ -373,8 +373,22 @@ export function ChatConversation() {
                             // For tool calls, show a reasoning panel while the tool is running,
                             // and only show the final output card when available
                             if (type.startsWith("tool-")) {
-                              if (state !== "output-available") {
+                              const isResultAvailable = state === "output-available" || state === "result";
+                              
+                              if (!isResultAvailable) {
                                 const toolName = type.slice(5) || 'tool';
+                                // Check for error state
+                                const isError = state === 'error' || state === 'failed';
+                                if (isError) {
+                                  return (
+                                    <div key={`tool-err-${idx}`} className="w-full">
+                                       <Card className="p-3 text-sm text-destructive border-destructive/50 bg-destructive/10">
+                                         Error using {toolName}: {(part as any)?.error || 'Unknown error'}
+                                       </Card>
+                                    </div>
+                                  );
+                                }
+
                                 return (
                                   <div key={`tool-reasoning-${idx}`} className="w-full flex flex-col gap-2">
                                     <Reasoning className="w-full" isStreaming={status === 'streaming'}>
@@ -428,10 +442,17 @@ export function ChatConversation() {
                                         />
                                       </MessageContent>
                                     )}
+                                    {toolName === 'show_chart' && (
+                                      <MessageContent>
+                                         <Card className="w-full h-[350px] flex items-center justify-center text-muted-foreground">
+                                            Generating Chart...
+                                         </Card>
+                                      </MessageContent>
+                                    )}
                                   </div>
                                 );
                               }
-                              if (state === "output-available" && output) {
+                              if (isResultAvailable && output) {
                                 const hasRenderable = Boolean(output.ui) || typeof output.summary === 'string';
                                 if (!hasRenderable) return null; // hide raw tool data like {snippets}
                                 const srcs = Array.isArray(output.sources) ? (output.sources as Array<{ id: string; url: string; label?: string; title?: string }>) : null;
@@ -607,5 +628,3 @@ function renderToolOutput(output: any): React.ReactNode {
     return null;
   }
 }
-
-
