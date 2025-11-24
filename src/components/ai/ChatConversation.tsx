@@ -65,7 +65,7 @@ export function ChatConversation() {
   const [isLoadingSuggestions, setIsLoadingSuggestions] = React.useState<boolean>(false);
   const lastSuggestionForAssistantId = React.useRef<string | null>(null);
 
-  function messageToText(msg: any): string {
+  function messageToText(msg: any, excludeTools: boolean = false): string {
     if (!msg) return '';
     if (typeof msg?.content === 'string' && msg.content.length > 0) return msg.content as string;
     if (Array.isArray(msg?.parts)) {
@@ -80,7 +80,7 @@ export function ChatConversation() {
         if (t === 'text-delta' && typeof p?.textDelta === 'string') buffer.push(p.textDelta);
         
         // Extract text from tool outputs (check both output-available state and any output)
-        if (t.startsWith('tool-')) {
+        if (!excludeTools && t.startsWith('tool-')) {
           const output = p?.output;
           if (output) {
             const toolText = extractTextFromToolOutput(output);
@@ -344,8 +344,8 @@ export function ChatConversation() {
                     part.output !== null &&
                     (part.output as any).ui
                 );
-              const text = messageToText(m);
-              const shouldRenderPrimaryText = Boolean(text) && !hasUiToolOutput;
+              const text = messageToText(m, true);
+              const shouldRenderPrimaryText = Boolean(text) && text.trim().length > 0;
 
               return (
                 <Message key={m.id} from={m.role}>

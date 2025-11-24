@@ -1,7 +1,7 @@
 "use client"
 
 import * as React from "react"
-import { useRouter, useSearchParams } from "next/navigation"
+import { useRouter, useSearchParams, usePathname } from "next/navigation"
 import { Button } from "@/components/ui/button"
 import { ScrollArea } from "@/components/ui/scroll-area"
 import { Separator } from "@/components/ui/separator"
@@ -45,6 +45,7 @@ interface Conversation {
 export function AppSidebar() {
   const router = useRouter()
   const searchParams = useSearchParams()
+  const pathname = usePathname()
   const currentConversationId = searchParams.get('c')
   const { state } = useSidebar()
   
@@ -53,6 +54,8 @@ export function AppSidebar() {
   const [renameDialogOpen, setRenameDialogOpen] = React.useState(false)
   const [conversationToRename, setConversationToRename] = React.useState<Conversation | null>(null)
   const [isRenaming, setIsRenaming] = React.useState(false)
+  const [hoveredConversationId, setHoveredConversationId] = React.useState<string | null>(null)
+  const [openDropdownId, setOpenDropdownId] = React.useState<string | null>(null)
 
   // Load conversations from API
   const loadConversations = async () => {
@@ -252,7 +255,7 @@ export function AppSidebar() {
         <Separator />
 
         {/* Navigation */}
-        <div className="space-y-2 p-2">
+        <div className="space-y-1 py-2 px-2">
           {!isCollapsed && (
             <div className="px-2 py-1 text-xs font-semibold text-muted-foreground uppercase tracking-wider">
               Navigation
@@ -260,26 +263,29 @@ export function AppSidebar() {
           )}
           
           <Button
-            variant="ghost"
+            variant={pathname === "/" ? "secondary" : "ghost"}
             size="sm"
             className={cn(
               "w-full justify-start gap-2",
-              isCollapsed && "justify-center px-2"
+              isCollapsed && "justify-center px-2",
+              pathname === "/" && "bg-secondary"
             )}
             title={isCollapsed ? "Chat" : undefined}
+            onClick={() => router.push("/")}
           >
             <MessageSquare className="h-4 w-4" />
             {!isCollapsed && "Chat"}
           </Button>
           
-          <Link href="/knowledge">
+          <Link href="/knowledge" className="block w-full">
             <Button
               asChild={false}
-              variant="ghost"
+              variant={pathname === "/knowledge" ? "secondary" : "ghost"}
               size="sm"
               className={cn(
                 "w-full justify-start gap-2",
-                isCollapsed && "justify-center px-2"
+                isCollapsed && "justify-center px-2",
+                pathname === "/knowledge" && "bg-secondary"
               )}
               title={isCollapsed ? "Knowledge Base" : undefined}
             >
@@ -304,7 +310,7 @@ export function AppSidebar() {
           </Button>
         </div>
 
-        <Separator className="my-4" />
+        <Separator />
 
         {/* Conversation History */}
         <div className="space-y-2 p-2">
@@ -339,80 +345,91 @@ export function AppSidebar() {
               <div
                 key={conversation.id}
                 className={cn(
-                  "grid items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent",
+                  "flex items-center gap-2 rounded-lg px-3 py-2 text-sm hover:bg-accent cursor-pointer relative",
                   currentConversationId === conversation.id && "bg-accent",
-                  isCollapsed 
-                    ? "grid-cols-1 justify-center" 
-                    : "grid-cols-[32px_1fr_32px]"
+                  isCollapsed && "justify-center px-2"
                 )}
+                onClick={() => selectConversation(conversation.id)}
+                onMouseEnter={() => setHoveredConversationId(conversation.id)}
+                onMouseLeave={() => setHoveredConversationId(null)}
               >
-                {/* Chat icon - fixed width */}
-                <div 
-                  className={cn(
-                    "flex h-8 w-8 items-center justify-center rounded-lg bg-muted cursor-pointer",
-                    isCollapsed && "mx-auto"
-                  )}
-                  onClick={() => selectConversation(conversation.id)}
-                  title={isCollapsed ? getConversationTitle(conversation) : undefined}
-                >
-                  <MessageSquare className="h-4 w-4" />
-                </div>
-                
-                {/* Chat content - only show when not collapsed */}
-                {!isCollapsed && (
+                {isCollapsed ? (
+                  <div 
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-muted"
+                    title={getConversationTitle(conversation)}
+                  >
+                    <MessageSquare className="h-4 w-4" />
+                  </div>
+                ) : (
                   <>
-                    <div 
-                      className="min-w-0 cursor-pointer overflow-hidden"
-                      onClick={() => selectConversation(conversation.id)}
-                    >
-                      <div className="font-medium truncate">
-                        {getConversationTitle(conversation)}
-                      </div>
-                      <div className="flex items-center gap-1 text-xs text-muted-foreground">
-                        <Clock className="h-3 w-3 flex-shrink-0" />
-                        <span className="truncate">{formatTimestamp(conversation.updated_at)}</span>
-                      </div>
+                    <div className="flex-1 min-w-0 truncate font-medium pr-2">
+                      {getConversationTitle(conversation)}
+                    </div>
+                    
+                    <div className="text-xs text-muted-foreground whitespace-nowrap flex-shrink-0">
+                      {formatTimestamp(conversation.updated_at)}
                     </div>
 
-                    {/* Three-dot menu - always visible with fixed width */}
-                    <div className="flex justify-end">
-                      <DropdownMenu>
-                        <DropdownMenuTrigger asChild>
-                          <Button
-                            variant="ghost"
-                            size="sm"
-                            className="h-8 w-8 p-0"
-                            onClick={(e) => e.stopPropagation()}
-                          >
-                            <MoreHorizontal className="h-4 w-4" />
-                          </Button>
-                        </DropdownMenuTrigger>
-                        <DropdownMenuContent align="end" className="w-40">
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              handleRename(conversation)
-                            }}
-                            className="cursor-pointer"
-                          >
-                            <Edit className="mr-2 h-4 w-4" />
-                            Rename
-                          </DropdownMenuItem>
-                          <DropdownMenuSeparator />
-                          <DropdownMenuItem
-                            onClick={(e) => {
-                              e.stopPropagation()
-                              deleteConversation(conversation.id)
-                            }}
-                            className="cursor-pointer text-destructive focus:text-destructive"
-                            variant="destructive"
-                          >
-                            <Trash2 className="mr-2 h-4 w-4" />
-                            Delete
-                          </DropdownMenuItem>
-                        </DropdownMenuContent>
-                      </DropdownMenu>
-                    </div>
+                    {(hoveredConversationId === conversation.id || openDropdownId === conversation.id) && (
+                      <div 
+                        className="absolute right-2 top-1/2 -translate-y-1/2 z-10 bg-background/95 rounded"
+                        onMouseEnter={() => setHoveredConversationId(conversation.id)}
+                        onMouseLeave={() => {
+                          if (openDropdownId !== conversation.id) {
+                            setHoveredConversationId(null)
+                          }
+                        }}
+                      >
+                        <DropdownMenu 
+                          open={openDropdownId === conversation.id}
+                          onOpenChange={(open) => {
+                            if (open) {
+                              setOpenDropdownId(conversation.id)
+                            } else {
+                              setOpenDropdownId(null)
+                              setHoveredConversationId(null)
+                            }
+                          }}
+                        >
+                          <DropdownMenuTrigger asChild>
+                            <Button
+                              variant="ghost"
+                              size="sm"
+                              className="h-6 w-6 p-0 hover:bg-accent"
+                              onClick={(e) => e.stopPropagation()}
+                            >
+                              <MoreHorizontal className="h-3 w-3" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="w-40">
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                handleRename(conversation)
+                                setOpenDropdownId(null)
+                              }}
+                              className="cursor-pointer"
+                            >
+                              <Edit className="mr-2 h-4 w-4" />
+                              Rename
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem
+                              onClick={(e) => {
+                                e.stopPropagation()
+                                deleteConversation(conversation.id)
+                                setOpenDropdownId(null)
+                              }}
+                              className="cursor-pointer text-destructive focus:text-destructive"
+                              variant="destructive"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" />
+                              Delete
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
+                      </div>
+                    )}
                   </>
                 )}
               </div>

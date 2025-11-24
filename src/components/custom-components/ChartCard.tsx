@@ -347,7 +347,7 @@ export function ChartCard({
                   dataKey={seriesKeys[0]}
                   nameKey={xAxisKey}
                   innerRadius={60}
-                  strokeWidth={5}
+                  strokeWidth={0}
                   label={({ name, percent }) => {
                     const displayName = String(name ?? '');
                     const shortName = displayName.length > 12 ? displayName.slice(0, 12) + '...' : displayName;
